@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segment API Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .test-section { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
+        button { background: #667eea; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #5568d3; }
+        .result { background: #f0f0f0; padding: 15px; margin-top: 10px; border-left: 4px solid #667eea; overflow-x: auto; }
+        .success { border-left-color: #4caf50; }
+        .error { border-left-color: #f44336; }
+        h2 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input { padding: 8px; width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+        small { display: block; color: #666; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 TOM Route Optimizer - Segment API Tests</h1>
+
+        <div class="test-section">
+            <h2>Test 1: Health Check</h2>
+            <p>Verify the API is running</p>
+            <button onclick="testHealth()">Run Health Check</button>
+            <div id="health-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: Get All Segments</h2>
+            <p>Retrieve all segments from database (should be empty initially)</p>
+            <button onclick="testGetSegments()">Get Segments</button>
+            <div id="get-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Add a Segment</h2>
+            <p>Create a new road segment with classification</p>
+            <div class="form-group">
+                <label>Start Latitude:</label>
+                <input type="number" id="start_lat" value="42.5345" step="0.0001" />
+                <small>Example: 42.5345 (Pontiac area)</small>
+            </div>
+            <div class="form-group">
+                <label>Start Longitude:</label>
+                <input type="number" id="start_lng" value="-83.2854" step="0.0001" />
+                <small>Example: -83.2854 (Pontiac area)</small>
+            </div>
+            <div class="form-group">
+                <label>End Latitude:</label>
+                <input type="number" id="end_lat" value="42.5400" step="0.0001" />
+                <small>Slightly different from start</small>
+            </div>
+            <div class="form-group">
+                <label>End Longitude:</label>
+                <input type="number" id="end_lng" value="-83.2800" step="0.0001" />
+                <small>Slightly different from start</small>
+            </div>
+            <div class="form-group">
+                <label>Classification:</label>
+                <select id="classification" style="padding: 8px; width: 100%; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="class-a">Class A (60T, Green)</option>
+                    <option value="class-b">Class B (50T, Orange)</option>
+                    <option value="restricted">Restricted (0T, Red)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Notes (optional):</label>
+                <input type="text" id="notes" placeholder="e.g., Main St near downtown" />
+            </div>
+            <button onclick="testAddSegment()">Add Segment</button>
+            <div id="add-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 4: Verify Segment Added</h2>
+            <p>Retrieve segments again to confirm the new one was saved</p>
+            <button onclick="testGetSegmentsAgain()">Get Segments Again</button>
+            <div id="verify-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 5: Find Nearby Segments</h2>
+            <p>Search for segments near a coordinate with radius (in degrees, ~111km per degree)</p>
+            <div class="form-group">
+                <label>Latitude:</label>
+                <input type="number" id="search_lat" value="42.5345" step="0.0001" />
+            </div>
+            <div class="form-group">
+                <label>Longitude:</label>
+                <input type="number" id="search_lng" value="-83.2854" step="0.0001" />
+            </div>
+            <div class="form-group">
+                <label>Radius (degrees):</label>
+                <input type="number" id="search_radius" value="0.05" step="0.01" />
+                <small>0.05 degrees ≈ 5.5 km</small>
+            </div>
+            <button onclick="testFindNearby()">Search Nearby</button>
+            <div id="nearby-result" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://bidmyroute.com/road_data/tom-route-optimizer/server/api.php';
+
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = isError ? 'result error' : 'result success';
+            element.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                showResult('health-result', data);
+            } catch (error) {
+                showResult('health-result', { error: error.message }, true);
+            }
+        }
+
+        async function testGetSegments() {
+            try {
+                const response = await fetch(`${API_URL}/segments`);
+                const data = await response.json();
+                showResult('get-result', data);
+            } catch (error) {
+                showResult('get-result', { error: error.message }, true);
+            }
+        }
+
+        async function testAddSegment() {
+            const segment = {
+                start_lat: parseFloat(document.getElementById('start_lat').value),
+                start_lng: parseFloat(document.getElementById('start_lng').value),
+                end_lat: parseFloat(document.getElementById('end_lat').value),
+                end_lng: parseFloat(document.getElementById('end_lng').value),
+                classification: document.getElementById('classification').value,
+                jurisdiction: 'Pontiac',
+                notes: document.getElementById('notes').value || null
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/segments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(segment)
+                });
+                const data = await response.json();
+                showResult('add-result', { status: response.status, ...data });
+            } catch (error) {
+                showResult('add-result', { error: error.message }, true);
+            }
+        }
+
+        async function testGetSegmentsAgain() {
+            try {
+                const response = await fetch(`${API_URL}/segments`);
+                const data = await response.json();
+                showResult('verify-result', data);
+            } catch (error) {
+                showResult('verify-result', { error: error.message }, true);
+            }
+        }
+
+        async function testFindNearby() {
+            const lat = document.getElementById('search_lat').value;
+            const lng = document.getElementById('search_lng').value;
+            const radius = document.getElementById('search_radius').value;
+
+            try {
+                const response = await fetch(`${API_URL}/segments/near/${lat},${lng},${radius}`);
+                const data = await response.json();
+                showResult('nearby-result', data);
+            } catch (error) {
+                showResult('nearby-result', { error: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>
