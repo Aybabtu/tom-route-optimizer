@@ -158,9 +158,23 @@ function App() {
         step.start_location.lat(), step.start_location.lng(),
         step.end_location.lat(), step.end_location.lng()
       )
-      const color = existing
-        ? (STEP_COLORS[existing.classification] || '#999')
-        : STEP_COLORS['unclassified']
+
+      let color
+      if (existing) {
+        color = STEP_COLORS[existing.classification] || '#999'
+      } else {
+        const pontiacRoad = checkPontiacRoad(step.instructions)
+        if (pontiacRoad) {
+          const cls = PONTIAC_CLASSIFICATIONS[pontiacRoad.classification]
+          color = cls?.maxTonnage >= 80 ? STEP_COLORS['class-a']
+                : cls?.maxTonnage >= 50 ? STEP_COLORS['class-b']
+                : STEP_COLORS['restricted']
+        } else if (classifyStep(step) === 'A') {
+          color = STEP_COLORS['class-a']
+        } else {
+          color = STEP_COLORS['unclassified']
+        }
+      }
 
       const polyline = new window.google.maps.Polyline({
         path,
