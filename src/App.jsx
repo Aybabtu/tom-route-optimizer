@@ -18,6 +18,7 @@ const defaultCenter = {
 }
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyDxV19ti05Hv48SGe4KDgyiSuaaz1hGa54'
+const GOOGLE_MAPS_LIBRARIES = ['geometry']
 const TRUCK_RATE_PER_HOUR = 75
 const MAX_CLASS_A_TONNAGE = 80
 const MAX_CLASS_B_TONNAGE = 50
@@ -139,7 +140,12 @@ function App() {
     const leg = routeData.directionsResult.routes[0].legs[0]
 
     leg.steps.forEach(step => {
-      const path = step.path?.length ? step.path : [step.start_location, step.end_location]
+      let path
+      if (step.polyline?.points) {
+        path = window.google.maps.geometry.encoding.decodePath(step.polyline.points)
+      } else {
+        path = step.path?.length > 1 ? step.path : [step.start_location, step.end_location]
+      }
 
       const polyline = new window.google.maps.Polyline({
         path,
@@ -485,7 +491,7 @@ function App() {
   }
 
   return (
-    <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+    <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY} libraries={GOOGLE_MAPS_LIBRARIES}>
       <div className="app-container">
         <div className="sidebar">
           <div className="header">
