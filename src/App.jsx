@@ -267,58 +267,10 @@ function App() {
     return transitions
   }
 
-  const renderSegments = () => {
-    if (!mapsRef.current || !window.google) return
-
-    // Clear previous segment polylines
-    segmentPolylinesRef.current.forEach(polyline => polyline.setMap(null))
-    segmentPolylinesRef.current = []
-
-    // Color mapping for classifications
-    const classificationColors = {
-      'class-a': { color: '#4caf50', weight: 6, opacity: 0.8 },    // Green
-      'class-b': { color: '#ff9800', weight: 6, opacity: 0.8 },    // Orange
-      'restricted': { color: '#f44336', weight: 6, opacity: 0.8 }  // Red
-    }
-
-    // Render each segment as a polyline
-    segments.forEach(segment => {
-      const path = [
-        { lat: parseFloat(segment.start_lat), lng: parseFloat(segment.start_lng) },
-        { lat: parseFloat(segment.end_lat), lng: parseFloat(segment.end_lng) }
-      ]
-
-      const styleConfig = classificationColors[segment.classification] || {
-        color: '#999',
-        weight: 4,
-        opacity: 0.5
-      }
-
-      const polyline = new window.google.maps.Polyline({
-        path: path,
-        geodesic: true,
-        strokeColor: styleConfig.color,
-        strokeOpacity: styleConfig.opacity,
-        strokeWeight: styleConfig.weight,
-        map: mapsRef.current,
-        title: `${segment.classification.toUpperCase()}: ${segment.notes || 'Unclassified'}`,
-        clickable: true,
-        segment: segment // Store segment data for access on click
-      })
-
-      // Handle click to open classifier
-      polyline.addListener('click', () => {
-        setSelectedSegment(segment)
-        setShowSegmentClassifier(true)
-      })
-
-      segmentPolylinesRef.current.push(polyline)
-    })
-  }
-
-  // Render segments whenever they change
+  // Clear any leftover segment polylines (legacy cleanup)
   useEffect(() => {
-    renderSegments()
+    segmentPolylinesRef.current.forEach(p => p.setMap(null))
+    segmentPolylinesRef.current = []
   }, [segments])
 
   // Re-color route steps whenever segments change (e.g. after saving a classification)
