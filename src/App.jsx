@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { GoogleMap, LoadScript } from '@react-google-maps/api'
 import RouteInput from './components/RouteInput'
 import RouteResults from './components/RouteResults'
+import PontiacRoadManager from './components/PontiacRoadManager'
+import { roadsApi } from './utils/api'
 import './App.css'
 
 const mapContainerStyle = {
@@ -25,15 +27,70 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [transitionMarkers, setTransitionMarkers] = useState([])
+  const [pontiacRoads, setPontiacRoads] = useState([])
   const mapsRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
   const markersRef = useRef([])
 
+  // Load Pontiac roads from database
+  useEffect(() => {
+    loadPontiacRoads()
+  }, [])
+
+  const loadPontiacRoads = async () => {
+    try {
+      const roads = await roadsApi.getByJurisdiction('Pontiac')
+      setPontiacRoads(roads)
+    } catch (error) {
+      console.error('Error loading Pontiac roads:', error)
+    }
+  }
+
+  const addPontiacRoad = (road) => {
+    setPontiacRoads([...pontiacRoads, road])
+    // Reload from database to ensure sync
+    loadPontiacRoads()
+  }
+
+  const deletePontiacRoad = async (index) => {
+    try {
+      const road = pontiacRoads[index]
+      if (road.id) {
+        await roadsApi.delete(road.id)
+      }
+      setPontiacRoads(pontiacRoads.filter((_, i) => i !== index))
+      loadPontiacRoads()
+    } catch (error) {
+      console.error('Error deleting road:', error)
+      alert('Error deleting road')
+    }
+  }
+
   const initializeDirectionsService = () => {
     if (window.google && !directionsServiceRef.current) {
       directionsServiceRef.current = new window.google.maps.DirectionsService()
     }
+  }
+
+  const PONTIAC_CLASSIFICATIONS = {
+    'class-a-pink': { maxTonnage: 80, name: 'Class A (Pink)' },
+    'class-a-mdot': { maxTonnage: 80, name: 'MDOT Class A (Lime Green)' },
+    'class-b': { maxTonnage: 50, name: 'Class B (Blue)' },
+    'restricted-3tn': { maxTonnage: 3, name: 'City Restricted - 3 TN (Orange)' },
+    'restricted-6tn': { maxTonnage: 6, name: 'City Restricted - 6 TN (Dark Green)' },
+    'restricted-grey': { maxTonnage: 10, name: 'City Restricted (Grey)' },
+    'oakland-county': { maxTonnage: 80, name: 'Oakland County (Burnt Orange)' }
+  }
+
+  const checkPontiacRoad = (instruction) => {
+    const instructionLower = instruction?.toLowerCase() || ''
+    for (const road of pontiacRoads) {
+      if (instructionLower.includes(road.name.toLowerCase())) {
+        return road
+      }
+    }
+    return null
   }
 
   const classifyStep = (step) => {
@@ -182,16 +239,38 @@ function App() {
         const costPerTon = truckCost / tonnage
         const tonMilesPerHour = (tonnage * distance) / durationHours
 
+        // Check for Pontiac roads and determine restrictions
+        let maxTonnage = MAX_CLASS_A_TONNAGE
+        let hasPontiacRoads = false
+        let restrictivePontiacRoad = null
+
+        leg.steps.forEach(step => {
+          const pontiacRoad = checkPontiacRoad(step.instructions)
+          if (pontiacRoad) {
+            hasPontiacRoads = true
+            const classification = PONTIAC_CLASSIFICATIONS[pontiacRoad.classification]
+            // Use the most restrictive Pontiac road limit
+            if (!restrictivePontiacRoad || classification.maxTonnage < maxTonnage) {
+              restrictivePontiacRoad = { ...pontiacRoad, classification }
+              maxTonnage = classification.maxTonnage
+            }
+          }
+        })
+
         // Determine tonnage warnings
         const warnings = []
-        let maxTonnage = MAX_CLASS_A_TONNAGE
 
-        if (routeClass === 'unknown') {
+        if (restrictivePontiacRoad) {
+          warnings.push({
+            level: 'info',
+            message: `⚠️ Route uses Pontiac road: ${restrictivePontiacRoad.name} (${restrictivePontiacRoad.classification.name}, max ${maxTonnage}T)`
+          })
+        } else if (routeClass === 'unknown') {
           warnings.push({
             level: 'warning',
             message: '⚠️ This route contains roads not confirmed on Oakland County TOM. Verify against map before routing.'
           })
-          maxTonnage = MAX_CLASS_B_TONNAGE // Be conservative with unknown roads
+          maxTonnage = MAX_CLASS_B_TONNAGE
         } else if (routeClass === 'B') {
           warnings.push({
             level: 'info',
@@ -203,7 +282,7 @@ function App() {
         if (tonnage > maxTonnage) {
           warnings.push({
             level: 'error',
-            message: `Load exceeds limit (${maxTonnage}t max). Route may be illegal.`
+            message: `Load EXCEEDS limit (${maxTonnage}t max). Route is NOT legal for this load.`
           })
         } else if (tonnage > maxTonnage * 0.8) {
           warnings.push({
@@ -256,6 +335,12 @@ function App() {
             <h1>🚛 Oakland County</h1>
             <h2>Route Optimizer</h2>
           </div>
+
+          <PontiacRoadManager
+            roads={pontiacRoads}
+            onAddRoad={addPontiacRoad}
+            onDeleteRoad={deletePontiacRoad}
+          />
 
           <RouteInput
             onSearch={handleRouteSearch}

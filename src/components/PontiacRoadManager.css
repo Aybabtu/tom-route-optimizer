@@ -1,0 +1,162 @@
+.pontiac-manager {
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fafafa;
+  margin-bottom: 12px;
+}
+
+.manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.manager-header h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.toggle-button {
+  padding: 6px 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-button:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+}
+
+.road-form {
+  background: white;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  margin-bottom: 12px;
+}
+
+.road-form .form-group {
+  margin-bottom: 12px;
+}
+
+.road-form .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.road-form label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.road-form input,
+.road-form select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.road-form input:focus,
+.road-form select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.submit-button {
+  width: 100%;
+  padding: 8px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-button:hover {
+  background: #45a049;
+  transform: translateY(-1px);
+}
+
+.roads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.road-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  font-size: 11px;
+}
+
+.road-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.road-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.road-classification {
+  color: #667eea;
+  font-size: 10px;
+}
+
+.road-tonnage {
+  color: #999;
+  font-size: 10px;
+}
+
+.delete-button {
+  padding: 4px 8px;
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef5350;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.delete-button:hover {
+  background: #ffcdd2;
+}
+
+.empty-message {
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+  padding: 8px;
+  margin: 0;
+}

@@ -1,4 +1,15 @@
-node_modules
 dist
 .DS_Store
 *.local
+
+# Root node_modules (frontend)
+/node_modules
+
+# Environment files (never commit credentials)
+.env
+.env.local
+.env.*.local
+/server/.env
+
+# But DO include server/node_modules for shared hosting deployment
+!/server/node_modules
