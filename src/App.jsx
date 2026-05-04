@@ -3,6 +3,7 @@ import { GoogleMap, LoadScript } from '@react-google-maps/api'
 import RouteInput from './components/RouteInput'
 import RouteResults from './components/RouteResults'
 import PontiacRoadManager from './components/PontiacRoadManager'
+import SegmentClassifier from './components/SegmentClassifier'
 import { roadsApi } from './utils/api'
 import './App.css'
 
@@ -28,14 +29,19 @@ function App() {
   const [error, setError] = useState(null)
   const [transitionMarkers, setTransitionMarkers] = useState([])
   const [pontiacRoads, setPontiacRoads] = useState([])
+  const [segments, setSegments] = useState([])
+  const [selectedSegment, setSelectedSegment] = useState(null)
+  const [showSegmentClassifier, setShowSegmentClassifier] = useState(false)
   const mapsRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
   const markersRef = useRef([])
+  const segmentPolylinesRef = useRef([])
 
-  // Load Pontiac roads from database
+  // Load Pontiac roads and segments from database
   useEffect(() => {
     loadPontiacRoads()
+    loadSegments()
   }, [])
 
   const loadPontiacRoads = async () => {
@@ -44,6 +50,19 @@ function App() {
       setPontiacRoads(roads)
     } catch (error) {
       console.error('Error loading Pontiac roads:', error)
+    }
+  }
+
+  const loadSegments = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || '/api'}/segments`
+      )
+      if (!response.ok) throw new Error('Failed to load segments')
+      const data = await response.json()
+      setSegments(data)
+    } catch (error) {
+      console.error('Error loading segments:', error)
     }
   }
 
@@ -65,6 +84,12 @@ function App() {
       console.error('Error deleting road:', error)
       alert('Error deleting road')
     }
+  }
+
+  const handleSegmentAdded = async (segmentData) => {
+    // Reload segments from database to reflect the new classification
+    await loadSegments()
+    setShowSegmentClassifier(false)
   }
 
   const initializeDirectionsService = () => {
@@ -134,6 +159,60 @@ function App() {
 
     return transitions
   }
+
+  const renderSegments = () => {
+    if (!mapsRef.current || !window.google) return
+
+    // Clear previous segment polylines
+    segmentPolylinesRef.current.forEach(polyline => polyline.setMap(null))
+    segmentPolylinesRef.current = []
+
+    // Color mapping for classifications
+    const classificationColors = {
+      'class-a': { color: '#4caf50', weight: 6, opacity: 0.8 },    // Green
+      'class-b': { color: '#ff9800', weight: 6, opacity: 0.8 },    // Orange
+      'restricted': { color: '#f44336', weight: 6, opacity: 0.8 }  // Red
+    }
+
+    // Render each segment as a polyline
+    segments.forEach(segment => {
+      const path = [
+        { lat: parseFloat(segment.start_lat), lng: parseFloat(segment.start_lng) },
+        { lat: parseFloat(segment.end_lat), lng: parseFloat(segment.end_lng) }
+      ]
+
+      const styleConfig = classificationColors[segment.classification] || {
+        color: '#999',
+        weight: 4,
+        opacity: 0.5
+      }
+
+      const polyline = new window.google.maps.Polyline({
+        path: path,
+        geodesic: true,
+        strokeColor: styleConfig.color,
+        strokeOpacity: styleConfig.opacity,
+        strokeWeight: styleConfig.weight,
+        map: mapsRef.current,
+        title: `${segment.classification.toUpperCase()}: ${segment.notes || 'Unclassified'}`,
+        clickable: true,
+        segment: segment // Store segment data for access on click
+      })
+
+      // Handle click to open classifier
+      polyline.addListener('click', () => {
+        setSelectedSegment(segment)
+        setShowSegmentClassifier(true)
+      })
+
+      segmentPolylinesRef.current.push(polyline)
+    })
+  }
+
+  // Render segments whenever they change
+  useEffect(() => {
+    renderSegments()
+  }, [segments])
 
   useEffect(() => {
     if (!mapsRef.current || selectedRoute === null || !routes[selectedRoute]) {
@@ -381,6 +460,17 @@ function App() {
             }}
           />
         </div>
+
+        {showSegmentClassifier && selectedSegment && (
+          <SegmentClassifier
+            segment={{
+              start: { lat: parseFloat(selectedSegment.start_lat), lng: parseFloat(selectedSegment.start_lng) },
+              end: { lat: parseFloat(selectedSegment.end_lat), lng: parseFloat(selectedSegment.end_lng) }
+            }}
+            onClose={() => setShowSegmentClassifier(false)}
+            onSegmentAdded={handleSegmentAdded}
+          />
+        )}
       </div>
     </LoadScript>
   )

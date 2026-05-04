@@ -9,8 +9,8 @@ const SEGMENT_CLASSIFICATIONS = {
 }
 
 function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
-  const [classification, setClassification] = useState('class-a')
-  const [notes, setNotes] = useState('')
+  const [classification, setClassification] = useState(segment?.classification || 'class-a')
+  const [notes, setNotes] = useState(segment?.notes || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -22,30 +22,43 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
     setError(null)
 
     try {
-      // Add segment via API
       const segmentApi = {
         start_lat: segment.start.lat,
         start_lng: segment.start.lng,
         end_lat: segment.end.lat,
         end_lng: segment.end.lng,
         classification: classification,
-        jurisdiction: 'Pontiac',
+        jurisdiction: segment.jurisdiction || 'Pontiac',
         notes: notes || null
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || '/api'}/segments`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(segmentApi)
-        }
-      )
+      let response
+
+      // If segment has an ID, update it; otherwise create new
+      if (segment.id) {
+        response = await fetch(
+          `${import.meta.env.VITE_API_URL || '/api'}/segments/${segment.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(segmentApi)
+          }
+        )
+      } else {
+        response = await fetch(
+          `${import.meta.env.VITE_API_URL || '/api'}/segments`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(segmentApi)
+          }
+        )
+      }
 
       if (!response.ok) throw new Error('Failed to save segment')
 
       const result = await response.json()
-      onSegmentAdded({ ...segmentApi, id: result.id })
+      onSegmentAdded({ ...segmentApi, id: segment.id || result.id })
       onClose()
     } catch (err) {
       setError(err.message)
@@ -64,8 +77,9 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
 
         <div className="segment-info">
           <p className="segment-coords">
-            <strong>Start:</strong> {segment.start.lat.toFixed(4)}, {segment.start.lng.toFixed(4)}<br/>
-            <strong>End:</strong> {segment.end.lat.toFixed(4)}, {segment.end.lng.toFixed(4)}
+            <strong>Start:</strong> {parseFloat(segment.start.lat).toFixed(4)}, {parseFloat(segment.start.lng).toFixed(4)}<br/>
+            <strong>End:</strong> {parseFloat(segment.end.lat).toFixed(4)}, {parseFloat(segment.end.lng).toFixed(4)}
+            {segment.id && <><br/><strong>ID:</strong> {segment.id}</>}
           </p>
         </div>
 
