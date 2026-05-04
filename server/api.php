@@ -99,7 +99,8 @@ function initializeDatabase($pdo) {
 // Parse request
 $method = $_SERVER['REQUEST_METHOD'];
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$path = str_replace('/road_data/tom-route-optimizer/server/api.php', '', $path);
+$path = str_replace($_SERVER['SCRIPT_NAME'], '', $path);
+if ($path === '') $path = '/';
 
 // Route handling
 $routes = [

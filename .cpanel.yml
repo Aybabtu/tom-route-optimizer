@@ -1,13 +1,11 @@
 ---
 deployment:
   tasks:
-    # Deploy to the road_data directory in public_html
     - export DEPLOYPATH=/home/bidmyrou/public_html/road_data/tom-route-optimizer/
-    # Create deployment directory if it doesn't exist
-    - /bin/mkdir -p $DEPLOYPATH
-    # Copy entire project to deployment path
-    - /bin/cp -r ./ $DEPLOYPATH
-    # Set proper permissions
+    - /bin/mkdir -p $DEPLOYPATH/assets
+    - /bin/mkdir -p $DEPLOYPATH/server
+    - /bin/cp dist/index.html $DEPLOYPATH/index.html
+    - /bin/cp dist/assets/* $DEPLOYPATH/assets/
+    - /bin/cp server/api.php $DEPLOYPATH/server/api.php
     - /bin/chmod -R 755 $DEPLOYPATH
-    # Ensure PHP API has execute permissions
     - /bin/chmod 644 $DEPLOYPATH/server/api.php

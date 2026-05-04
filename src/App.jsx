@@ -37,6 +37,13 @@ function App() {
   const directionsRendererRef = useRef(null)
   const markersRef = useRef([])
   const segmentPolylinesRef = useRef([])
+  const stepPolylinesRef = useRef([])
+  const segmentsRef = useRef([])
+
+  // Keep segmentsRef current so click handlers always see the latest data
+  useEffect(() => {
+    segmentsRef.current = segments
+  }, [segments])
 
   // Load Pontiac roads and segments from database
   useEffect(() => {
@@ -87,9 +94,74 @@ function App() {
   }
 
   const handleSegmentAdded = async (segmentData) => {
-    // Reload segments from database to reflect the new classification
     await loadSegments()
     setShowSegmentClassifier(false)
+  }
+
+  const findNearbySegment = (startLat, startLng, endLat, endLng) => {
+    const THRESHOLD = 0.0003 // ~30 metres
+    return segmentsRef.current.find(seg =>
+      Math.abs(parseFloat(seg.start_lat) - startLat) < THRESHOLD &&
+      Math.abs(parseFloat(seg.start_lng) - startLng) < THRESHOLD &&
+      Math.abs(parseFloat(seg.end_lat) - endLat) < THRESHOLD &&
+      Math.abs(parseFloat(seg.end_lng) - endLng) < THRESHOLD
+    ) || null
+  }
+
+  const handleStepClick = (step) => {
+    const startLat = step.start_location.lat()
+    const startLng = step.start_location.lng()
+    const endLat = step.end_location.lat()
+    const endLng = step.end_location.lng()
+    const roadName = step.instructions?.replace(/<[^>]*>/g, '') || ''
+
+    const existing = findNearbySegment(startLat, startLng, endLat, endLng)
+    if (existing) {
+      setSelectedSegment(existing)
+    } else {
+      setSelectedSegment({
+        start_lat: startLat,
+        start_lng: startLng,
+        end_lat: endLat,
+        end_lng: endLng,
+        road_name: roadName,
+      })
+    }
+    setShowSegmentClassifier(true)
+  }
+
+  const renderRouteSteps = (routeData) => {
+    stepPolylinesRef.current.forEach(p => p.setMap(null))
+    stepPolylinesRef.current = []
+
+    if (!mapsRef.current || !window.google || !routeData) return
+
+    const leg = routeData.directionsResult.routes[0].legs[0]
+
+    leg.steps.forEach(step => {
+      const path = step.path?.length ? step.path : [step.start_location, step.end_location]
+
+      const polyline = new window.google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: '#1976d2',
+        strokeOpacity: 0,
+        strokeWeight: 20,
+        map: mapsRef.current,
+        clickable: true,
+        zIndex: 60,
+      })
+
+      polyline.addListener('mouseover', () => {
+        polyline.setOptions({ strokeOpacity: 0.25 })
+      })
+      polyline.addListener('mouseout', () => {
+        polyline.setOptions({ strokeOpacity: 0 })
+      })
+      polyline.addListener('click', () => handleStepClick(step))
+
+      stepPolylinesRef.current.push(polyline)
+    })
   }
 
   const initializeDirectionsService = () => {
@@ -216,6 +288,8 @@ function App() {
 
   useEffect(() => {
     if (!mapsRef.current || selectedRoute === null || !routes[selectedRoute]) {
+      stepPolylinesRef.current.forEach(p => p.setMap(null))
+      stepPolylinesRef.current = []
       return
     }
 
@@ -265,6 +339,8 @@ function App() {
         })
         markersRef.current.push(marker)
       })
+
+      renderRouteSteps(routes[selectedRoute])
     }
   }, [selectedRoute, routes])
 
@@ -278,6 +354,8 @@ function App() {
     setError(null)
     setRoutes([])
     setSelectedRoute(null)
+    stepPolylinesRef.current.forEach(p => p.setMap(null))
+    stepPolylinesRef.current = []
 
     try {
       // Request multiple routes
@@ -433,12 +511,17 @@ function App() {
           )}
 
           {routes.length > 0 && (
-            <RouteResults
-              routes={routes}
-              selectedRouteId={selectedRoute}
-              onSelectRoute={setSelectedRoute}
-              transitions={transitionMarkers}
-            />
+            <>
+              <RouteResults
+                routes={routes}
+                selectedRouteId={selectedRoute}
+                onSelectRoute={setSelectedRoute}
+                transitions={transitionMarkers}
+              />
+              <div className="classify-hint">
+                Click any segment on the route to classify it
+              </div>
+            </>
           )}
 
           {loading && (
@@ -464,8 +547,13 @@ function App() {
         {showSegmentClassifier && selectedSegment && (
           <SegmentClassifier
             segment={{
+              id: selectedSegment.id || null,
               start: { lat: parseFloat(selectedSegment.start_lat), lng: parseFloat(selectedSegment.start_lng) },
-              end: { lat: parseFloat(selectedSegment.end_lat), lng: parseFloat(selectedSegment.end_lng) }
+              end: { lat: parseFloat(selectedSegment.end_lat), lng: parseFloat(selectedSegment.end_lng) },
+              classification: selectedSegment.classification || null,
+              notes: selectedSegment.notes || null,
+              jurisdiction: selectedSegment.jurisdiction || null,
+              roadName: selectedSegment.road_name || null,
             }}
             onClose={() => setShowSegmentClassifier(false)}
             onSegmentAdded={handleSegmentAdded}

@@ -16,6 +16,8 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
 
   if (!segment) return null
 
+  const isEditing = !!segment.id
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -71,15 +73,18 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
     <div className="segment-classifier-overlay">
       <div className="segment-classifier-modal">
         <div className="modal-header">
-          <h3>Classify Route Segment</h3>
+          <h3>{isEditing ? 'Edit Classification' : 'Classify Route Segment'}</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
 
         <div className="segment-info">
+          {segment.roadName && (
+            <p className="road-name">{segment.roadName}</p>
+          )}
           <p className="segment-coords">
-            <strong>Start:</strong> {parseFloat(segment.start.lat).toFixed(4)}, {parseFloat(segment.start.lng).toFixed(4)}<br/>
-            <strong>End:</strong> {parseFloat(segment.end.lat).toFixed(4)}, {parseFloat(segment.end.lng).toFixed(4)}
-            {segment.id && <><br/><strong>ID:</strong> {segment.id}</>}
+            <strong>Start:</strong> {parseFloat(segment.start.lat).toFixed(5)}, {parseFloat(segment.start.lng).toFixed(5)}<br/>
+            <strong>End:</strong> {parseFloat(segment.end.lat).toFixed(5)}, {parseFloat(segment.end.lng).toFixed(5)}
+            {segment.id && <><br/><strong>DB ID:</strong> {segment.id}</>}
           </p>
         </div>
 
@@ -125,7 +130,7 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
               Cancel
             </button>
             <button type="submit" className="save-btn" disabled={loading}>
-              {loading ? 'Saving...' : 'Save Segment'}
+              {loading ? 'Saving...' : isEditing ? 'Update Segment' : 'Save Segment'}
             </button>
           </div>
         </form>
