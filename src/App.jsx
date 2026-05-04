@@ -65,18 +65,17 @@ function App() {
 
   const checkAndRerouteIfRestricted = (freshSegments) => {
     const currentRoutes = routesRef.current
-    const currentSelected = selectedRouteRef.current
-    if (!currentRoutes.length || currentSelected === null) return
+    const currentSelectedId = selectedRouteRef.current
+    if (!currentRoutes.length || currentSelectedId === null) return
 
-    const findSegmentIn = (segs, startLat, startLng, endLat, endLng) => {
-      const T = 0.0003
-      return segs.find(seg =>
+    const T = 0.0003
+    const findSegmentIn = (segs, startLat, startLng, endLat, endLng) =>
+      segs.find(seg =>
         Math.abs(parseFloat(seg.start_lat) - startLat) < T &&
         Math.abs(parseFloat(seg.start_lng) - startLng) < T &&
         Math.abs(parseFloat(seg.end_lat) - endLat) < T &&
         Math.abs(parseFloat(seg.end_lng) - endLng) < T
       ) || null
-    }
 
     const routeHasRestricted = (route) =>
       route.directionsResult.routes[0].legs[0].steps.some(step => {
@@ -88,21 +87,22 @@ function App() {
         return seg?.classification === 'restricted'
       })
 
-    if (!routeHasRestricted(currentRoutes[currentSelected])) return
+    // Find the current route by id, not by array index
+    const currentRoute = currentRoutes.find(r => r.id === currentSelectedId)
+    if (!currentRoute || !routeHasRestricted(currentRoute)) return
 
-    // Find best alternative sorted by Class A coverage then efficiency
     const countClassA = (route) =>
-      route.directionsResult.routes[0].legs[0].steps.filter(step =>
-        classifyStep(step) === 'A'
+      route.directionsResult.routes[0].legs[0].steps.filter(
+        step => classifyStep(step) === 'A'
       ).length
 
     const alternatives = currentRoutes
-      .filter((r, i) => i !== currentSelected && !routeHasRestricted(r))
+      .filter(r => r.id !== currentSelectedId && !routeHasRestricted(r))
       .sort((a, b) => countClassA(b) - countClassA(a) || b.efficiency - a.efficiency)
 
     if (alternatives.length > 0) {
       setSelectedRoute(alternatives[0].id)
-      setRerouteMessage(`Route changed to avoid restricted segment — using ${alternatives[0].summary}`)
+      setRerouteMessage(`Route updated to avoid restricted road — now using ${alternatives[0].summary}`)
     } else {
       setRerouteMessage('Warning: All available routes pass through restricted segments.')
     }
@@ -260,44 +260,42 @@ function App() {
 
   // Re-color route steps whenever segments change (e.g. after saving a classification)
   useEffect(() => {
-    if (selectedRoute !== null && routes[selectedRoute]) {
-      renderRouteSteps(routes[selectedRoute])
-    }
+    const activeRoute = routes.find(r => r.id === selectedRoute)
+    if (activeRoute) renderRouteSteps(activeRoute)
   }, [segments])
 
   useEffect(() => {
-    if (!mapsRef.current || selectedRoute === null || !routes[selectedRoute]) {
+    const activeRoute = routes.find(r => r.id === selectedRoute)
+
+    if (!mapsRef.current || !activeRoute) {
       stepPolylinesRef.current.forEach(p => p.setMap(null))
       stepPolylinesRef.current = []
       return
     }
 
-    // Clear previous renderer and markers
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setMap(null)
     }
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
-    // Create new renderer for selected route
     if (window.google) {
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         map: mapsRef.current,
         suppressPolylines: true,
         suppressMarkers: false,
       })
-      directionsRendererRef.current.setDirections(routes[selectedRoute].directionsResult)
+      directionsRendererRef.current.setDirections(activeRoute.directionsResult)
       directionsRendererRef.current.setRouteIndex(0)
 
-      // Find and mark transitions
-      const transitions = findTransitions(routes[selectedRoute].directionsResult.routes[0])
+      const transitions = findTransitions(activeRoute.directionsResult.routes[0])
       setTransitionMarkers(transitions)
 
       transitions.forEach(transition => {
         const colorMap = {
-          'A': '#4caf50',      // Green for Class A
-          'B': '#ff9800',      // Orange for Class B
-          'unknown': '#9c27b0' // Purple for Unknown
+          'A': '#4caf50',
+          'B': '#ff9800',
+          'unknown': '#9c27b0'
         }
         const marker = new window.google.maps.Marker({
           position: transition.location,
@@ -315,7 +313,7 @@ function App() {
         markersRef.current.push(marker)
       })
 
-      renderRouteSteps(routes[selectedRoute])
+      renderRouteSteps(activeRoute)
     }
   }, [selectedRoute, routes])
 
