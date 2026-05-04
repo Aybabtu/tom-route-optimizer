@@ -71,6 +71,26 @@ function initializeDatabase($pdo) {
                 INDEX(county)
             )
         ");
+
+        // Create road_segments table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS road_segments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                start_lat DECIMAL(10, 8) NOT NULL,
+                start_lng DECIMAL(11, 8) NOT NULL,
+                end_lat DECIMAL(10, 8) NOT NULL,
+                end_lng DECIMAL(11, 8) NOT NULL,
+                classification VARCHAR(50) NOT NULL,
+                jurisdiction VARCHAR(100),
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX(start_lat, start_lng),
+                INDEX(end_lat, end_lng),
+                INDEX(classification),
+                INDEX(jurisdiction)
+            )
+        ");
     } catch (PDOException $e) {
         error_log('Database initialization error: ' . $e->getMessage());
     }
@@ -150,6 +170,36 @@ function dispatch($method, $path, $pdo) {
     if ($method === 'DELETE' && strpos($path, '/roads/') === 0) {
         $id = substr($path, strlen('/roads/'));
         return deleteRoad($pdo, $id);
+    }
+
+    // Get all segments
+    if ($method === 'GET' && $path === '/segments') {
+        return getSegments($pdo);
+    }
+
+    // Add segment
+    if ($method === 'POST' && $path === '/segments') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        return addSegment($pdo, $data);
+    }
+
+    // Update segment
+    if ($method === 'PUT' && strpos($path, '/segments/') === 0) {
+        $id = substr($path, strlen('/segments/'));
+        $data = json_decode(file_get_contents('php://input'), true);
+        return updateSegment($pdo, $id, $data);
+    }
+
+    // Delete segment
+    if ($method === 'DELETE' && strpos($path, '/segments/') === 0) {
+        $id = substr($path, strlen('/segments/'));
+        return deleteSegment($pdo, $id);
+    }
+
+    // Find segments near coordinates
+    if ($method === 'GET' && strpos($path, '/segments/near/') === 0) {
+        $coords = substr($path, strlen('/segments/near/'));
+        return findNearbySegments($pdo, $coords);
     }
 
     // 404
@@ -291,6 +341,131 @@ function getStats($pdo) {
     } catch (PDOException $e) {
         http_response_code(500);
         return ['error' => 'Failed to fetch statistics'];
+    }
+}
+
+// Segment handlers
+
+function getSegments($pdo) {
+    try {
+        $stmt = $pdo->query('SELECT * FROM road_segments ORDER BY created_at DESC');
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to fetch segments'];
+    }
+}
+
+function addSegment($pdo, $data) {
+    if (!isset($data['start_lat']) || !isset($data['start_lng']) ||
+        !isset($data['end_lat']) || !isset($data['end_lng']) ||
+        !isset($data['classification'])) {
+        http_response_code(400);
+        return ['error' => 'Missing required fields: start_lat, start_lng, end_lat, end_lng, classification'];
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'INSERT INTO road_segments (start_lat, start_lng, end_lat, end_lng, classification, jurisdiction, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $data['start_lat'],
+            $data['start_lng'],
+            $data['end_lat'],
+            $data['end_lng'],
+            $data['classification'],
+            $data['jurisdiction'] ?? null,
+            $data['notes'] ?? null
+        ]);
+
+        http_response_code(201);
+        return [
+            'id' => $pdo->lastInsertId(),
+            'message' => 'Segment added successfully'
+        ];
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to add segment: ' . $e->getMessage()];
+    }
+}
+
+function updateSegment($pdo, $id, $data) {
+    try {
+        $stmt = $pdo->prepare(
+            'UPDATE road_segments SET start_lat = ?, start_lng = ?, end_lat = ?, end_lng = ?, classification = ?, jurisdiction = ?, notes = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $data['start_lat'],
+            $data['start_lng'],
+            $data['end_lat'],
+            $data['end_lng'],
+            $data['classification'],
+            $data['jurisdiction'] ?? null,
+            $data['notes'] ?? null,
+            $id
+        ]);
+
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            return ['error' => 'Segment not found'];
+        }
+
+        return ['message' => 'Segment updated successfully'];
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to update segment'];
+    }
+}
+
+function deleteSegment($pdo, $id) {
+    try {
+        $stmt = $pdo->prepare('DELETE FROM road_segments WHERE id = ?');
+        $stmt->execute([$id]);
+
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            return ['error' => 'Segment not found'];
+        }
+
+        return ['message' => 'Segment deleted successfully'];
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to delete segment'];
+    }
+}
+
+function findNearbySegments($pdo, $coords) {
+    // Parse coordinates: lat,lng,radius
+    $parts = explode(',', $coords);
+    if (count($parts) !== 3) {
+        http_response_code(400);
+        return ['error' => 'Invalid coordinates format. Use: lat,lng,radius'];
+    }
+
+    $lat = (float)$parts[0];
+    $lng = (float)$parts[1];
+    $radius = (float)$parts[2]; // in degrees (approximately 111km per degree)
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT * FROM road_segments
+             WHERE start_lat BETWEEN ? AND ?
+             AND start_lng BETWEEN ? AND ?
+             AND end_lat BETWEEN ? AND ?
+             AND end_lng BETWEEN ? AND ?'
+        );
+        $stmt->execute([
+            $lat - $radius, $lat + $radius,
+            $lng - $radius, $lng + $radius,
+            $lat - $radius, $lat + $radius,
+            $lng - $radius, $lng + $radius
+        ]);
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to search segments'];
     }
 }
 
