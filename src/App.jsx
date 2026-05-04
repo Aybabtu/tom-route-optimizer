@@ -131,6 +131,13 @@ function App() {
     setShowSegmentClassifier(true)
   }
 
+  const STEP_COLORS = {
+    'class-a':   '#4caf50',
+    'class-b':   '#ff9800',
+    'restricted': '#f44336',
+    'unclassified': '#9c27b0',
+  }
+
   const renderRouteSteps = (routeData) => {
     stepPolylinesRef.current.forEach(p => p.setMap(null))
     stepPolylinesRef.current = []
@@ -147,22 +154,30 @@ function App() {
         path = step.path?.length > 1 ? step.path : [step.start_location, step.end_location]
       }
 
+      const existing = findNearbySegment(
+        step.start_location.lat(), step.start_location.lng(),
+        step.end_location.lat(), step.end_location.lng()
+      )
+      const color = existing
+        ? (STEP_COLORS[existing.classification] || '#999')
+        : STEP_COLORS['unclassified']
+
       const polyline = new window.google.maps.Polyline({
         path,
         geodesic: true,
-        strokeColor: '#1976d2',
-        strokeOpacity: 0,
-        strokeWeight: 20,
+        strokeColor: color,
+        strokeOpacity: 0.85,
+        strokeWeight: 6,
         map: mapsRef.current,
         clickable: true,
         zIndex: 60,
       })
 
       polyline.addListener('mouseover', () => {
-        polyline.setOptions({ strokeOpacity: 0.25 })
+        polyline.setOptions({ strokeWeight: 9, strokeOpacity: 1 })
       })
       polyline.addListener('mouseout', () => {
-        polyline.setOptions({ strokeOpacity: 0 })
+        polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.85 })
       })
       polyline.addListener('click', () => handleStepClick(step))
 
@@ -292,6 +307,13 @@ function App() {
     renderSegments()
   }, [segments])
 
+  // Re-color route steps whenever segments change (e.g. after saving a classification)
+  useEffect(() => {
+    if (selectedRoute !== null && routes[selectedRoute]) {
+      renderRouteSteps(routes[selectedRoute])
+    }
+  }, [segments])
+
   useEffect(() => {
     if (!mapsRef.current || selectedRoute === null || !routes[selectedRoute]) {
       stepPolylinesRef.current.forEach(p => p.setMap(null))
@@ -310,11 +332,7 @@ function App() {
     if (window.google) {
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         map: mapsRef.current,
-        polylineOptions: {
-          zIndex: 50,
-          strokeColor: '#1976d2',
-          strokeWeight: 5,
-        },
+        suppressPolylines: true,
         suppressMarkers: false,
       })
       directionsRendererRef.current.setDirections(routes[selectedRoute].directionsResult)
