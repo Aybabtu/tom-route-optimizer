@@ -170,6 +170,7 @@ textarea:focus {
 }
 
 .cancel-btn,
+.remove-btn,
 .save-btn {
   flex: 1;
   padding: 10px 16px;
@@ -188,6 +189,18 @@ textarea:focus {
 
 .cancel-btn:hover {
   background: #e0e0e0;
+}
+
+.remove-btn {
+  background: #ffebee;
+  color: #c62828;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+}
+
+.remove-btn:hover:not(:disabled) {
+  background: #f44336;
+  color: white;
 }
 
 .save-btn {

@@ -18,6 +18,25 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
 
   const isEditing = !!segment.id
 
+  const handleRemove = async () => {
+    if (!segment.id) return
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || '/api'}/segments/${segment.id}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) throw new Error('Failed to remove classification')
+      onSegmentAdded(null)
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -129,8 +148,13 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
             <button type="button" className="cancel-btn" onClick={onClose}>
               Cancel
             </button>
+            {isEditing && (
+              <button type="button" className="remove-btn" onClick={handleRemove} disabled={loading}>
+                {loading ? '...' : 'Remove'}
+              </button>
+            )}
             <button type="submit" className="save-btn" disabled={loading}>
-              {loading ? 'Saving...' : isEditing ? 'Update Segment' : 'Save Segment'}
+              {loading ? 'Saving...' : isEditing ? 'Update' : 'Save'}
             </button>
           </div>
         </form>
