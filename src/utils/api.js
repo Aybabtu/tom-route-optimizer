@@ -1,8 +1,9 @@
 // API utility for backend communication
 
 // Use environment variable if set, otherwise use local proxy
+// For PHP API, the base path is different than Node.js
 const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
+  ? import.meta.env.VITE_API_URL
   : '/api'
 
 console.log('API Base URL:', API_BASE)
