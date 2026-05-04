@@ -72,6 +72,42 @@
   to { transform: rotate(360deg); }
 }
 
+.reroute-message {
+  margin: 8px 16px;
+  padding: 10px 36px 10px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  position: relative;
+}
+
+.reroute-info {
+  background: #e8f5e9;
+  border-left: 3px solid #4caf50;
+  color: #2e7d32;
+}
+
+.reroute-warning {
+  background: #fff3e0;
+  border-left: 3px solid #ff9800;
+  color: #e65100;
+}
+
+.reroute-dismiss {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0;
+}
+
+.reroute-dismiss:hover { opacity: 1; }
+
 .classify-hint {
   margin: 8px 16px 12px;
   padding: 8px 12px;

@@ -2,9 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { GoogleMap, LoadScript } from '@react-google-maps/api'
 import RouteInput from './components/RouteInput'
 import RouteResults from './components/RouteResults'
-import PontiacRoadManager from './components/PontiacRoadManager'
 import SegmentClassifier from './components/SegmentClassifier'
-import { roadsApi } from './utils/api'
 import './App.css'
 
 const mapContainerStyle = {
@@ -29,10 +27,10 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [transitionMarkers, setTransitionMarkers] = useState([])
-  const [pontiacRoads, setPontiacRoads] = useState([])
   const [segments, setSegments] = useState([])
   const [selectedSegment, setSelectedSegment] = useState(null)
   const [showSegmentClassifier, setShowSegmentClassifier] = useState(false)
+  const [rerouteMessage, setRerouteMessage] = useState(null)
   const mapsRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
@@ -40,26 +38,15 @@ function App() {
   const segmentPolylinesRef = useRef([])
   const stepPolylinesRef = useRef([])
   const segmentsRef = useRef([])
+  const routesRef = useRef([])
+  const selectedRouteRef = useRef(null)
 
-  // Keep segmentsRef current so click handlers always see the latest data
-  useEffect(() => {
-    segmentsRef.current = segments
-  }, [segments])
+  // Keep refs in sync so callbacks always have fresh data
+  useEffect(() => { segmentsRef.current = segments }, [segments])
+  useEffect(() => { routesRef.current = routes }, [routes])
+  useEffect(() => { selectedRouteRef.current = selectedRoute }, [selectedRoute])
 
-  // Load Pontiac roads and segments from database
-  useEffect(() => {
-    loadPontiacRoads()
-    loadSegments()
-  }, [])
-
-  const loadPontiacRoads = async () => {
-    try {
-      const roads = await roadsApi.getByJurisdiction('Pontiac')
-      setPontiacRoads(roads)
-    } catch (error) {
-      console.error('Error loading Pontiac roads:', error)
-    }
-  }
+  useEffect(() => { loadSegments() }, [])
 
   const loadSegments = async () => {
     try {
@@ -69,34 +56,65 @@ function App() {
       if (!response.ok) throw new Error('Failed to load segments')
       const data = await response.json()
       setSegments(data)
+      return data
     } catch (error) {
       console.error('Error loading segments:', error)
+      return []
     }
   }
 
-  const addPontiacRoad = (road) => {
-    setPontiacRoads([...pontiacRoads, road])
-    // Reload from database to ensure sync
-    loadPontiacRoads()
-  }
+  const checkAndRerouteIfRestricted = (freshSegments) => {
+    const currentRoutes = routesRef.current
+    const currentSelected = selectedRouteRef.current
+    if (!currentRoutes.length || currentSelected === null) return
 
-  const deletePontiacRoad = async (index) => {
-    try {
-      const road = pontiacRoads[index]
-      if (road.id) {
-        await roadsApi.delete(road.id)
-      }
-      setPontiacRoads(pontiacRoads.filter((_, i) => i !== index))
-      loadPontiacRoads()
-    } catch (error) {
-      console.error('Error deleting road:', error)
-      alert('Error deleting road')
+    const findSegmentIn = (segs, startLat, startLng, endLat, endLng) => {
+      const T = 0.0003
+      return segs.find(seg =>
+        Math.abs(parseFloat(seg.start_lat) - startLat) < T &&
+        Math.abs(parseFloat(seg.start_lng) - startLng) < T &&
+        Math.abs(parseFloat(seg.end_lat) - endLat) < T &&
+        Math.abs(parseFloat(seg.end_lng) - endLng) < T
+      ) || null
+    }
+
+    const routeHasRestricted = (route) =>
+      route.directionsResult.routes[0].legs[0].steps.some(step => {
+        const seg = findSegmentIn(
+          freshSegments,
+          step.start_location.lat(), step.start_location.lng(),
+          step.end_location.lat(), step.end_location.lng()
+        )
+        return seg?.classification === 'restricted'
+      })
+
+    if (!routeHasRestricted(currentRoutes[currentSelected])) return
+
+    // Find best alternative sorted by Class A coverage then efficiency
+    const countClassA = (route) =>
+      route.directionsResult.routes[0].legs[0].steps.filter(step =>
+        classifyStep(step) === 'A'
+      ).length
+
+    const alternatives = currentRoutes
+      .filter((r, i) => i !== currentSelected && !routeHasRestricted(r))
+      .sort((a, b) => countClassA(b) - countClassA(a) || b.efficiency - a.efficiency)
+
+    if (alternatives.length > 0) {
+      setSelectedRoute(alternatives[0].id)
+      setRerouteMessage(`Route changed to avoid restricted segment — using ${alternatives[0].summary}`)
+    } else {
+      setRerouteMessage('Warning: All available routes pass through restricted segments.')
     }
   }
 
   const handleSegmentAdded = async (segmentData) => {
-    await loadSegments()
+    const freshSegments = await loadSegments()
     setShowSegmentClassifier(false)
+    setRerouteMessage(null)
+    if (segmentData?.classification === 'restricted') {
+      checkAndRerouteIfRestricted(freshSegments)
+    }
   }
 
   const findNearbySegment = (startLat, startLng, endLat, endLng) => {
@@ -159,22 +177,9 @@ function App() {
         step.end_location.lat(), step.end_location.lng()
       )
 
-      let color
-      if (existing) {
-        color = STEP_COLORS[existing.classification] || '#999'
-      } else {
-        const pontiacRoad = checkPontiacRoad(step.instructions)
-        if (pontiacRoad) {
-          const cls = PONTIAC_CLASSIFICATIONS[pontiacRoad.classification]
-          color = cls?.maxTonnage >= 80 ? STEP_COLORS['class-a']
-                : cls?.maxTonnage >= 50 ? STEP_COLORS['class-b']
-                : STEP_COLORS['restricted']
-        } else if (classifyStep(step) === 'A') {
-          color = STEP_COLORS['class-a']
-        } else {
-          color = STEP_COLORS['unclassified']
-        }
-      }
+      const color = existing
+        ? (STEP_COLORS[existing.classification] || '#999')
+        : classifyStep(step) === 'A' ? STEP_COLORS['class-a'] : STEP_COLORS['unclassified']
 
       const polyline = new window.google.maps.Polyline({
         path,
@@ -203,26 +208,6 @@ function App() {
     if (window.google && !directionsServiceRef.current) {
       directionsServiceRef.current = new window.google.maps.DirectionsService()
     }
-  }
-
-  const PONTIAC_CLASSIFICATIONS = {
-    'class-a-pink': { maxTonnage: 80, name: 'Class A (Pink)' },
-    'class-a-mdot': { maxTonnage: 80, name: 'MDOT Class A (Lime Green)' },
-    'class-b': { maxTonnage: 50, name: 'Class B (Blue)' },
-    'restricted-3tn': { maxTonnage: 3, name: 'City Restricted - 3 TN (Orange)' },
-    'restricted-6tn': { maxTonnage: 6, name: 'City Restricted - 6 TN (Dark Green)' },
-    'restricted-grey': { maxTonnage: 10, name: 'City Restricted (Grey)' },
-    'oakland-county': { maxTonnage: 80, name: 'Oakland County (Burnt Orange)' }
-  }
-
-  const checkPontiacRoad = (instruction) => {
-    const instructionLower = instruction?.toLowerCase() || ''
-    for (const road of pontiacRoads) {
-      if (instructionLower.includes(road.name.toLowerCase())) {
-        return road
-      }
-    }
-    return null
   }
 
   const classifyStep = (step) => {
@@ -386,33 +371,10 @@ function App() {
         const costPerTon = truckCost / tonnage
         const tonMilesPerHour = (tonnage * distance) / durationHours
 
-        // Check for Pontiac roads and determine restrictions
         let maxTonnage = MAX_CLASS_A_TONNAGE
-        let hasPontiacRoads = false
-        let restrictivePontiacRoad = null
-
-        leg.steps.forEach(step => {
-          const pontiacRoad = checkPontiacRoad(step.instructions)
-          if (pontiacRoad) {
-            hasPontiacRoads = true
-            const classification = PONTIAC_CLASSIFICATIONS[pontiacRoad.classification]
-            // Use the most restrictive Pontiac road limit
-            if (!restrictivePontiacRoad || classification.maxTonnage < maxTonnage) {
-              restrictivePontiacRoad = { ...pontiacRoad, classification }
-              maxTonnage = classification.maxTonnage
-            }
-          }
-        })
-
-        // Determine tonnage warnings
         const warnings = []
 
-        if (restrictivePontiacRoad) {
-          warnings.push({
-            level: 'info',
-            message: `⚠️ Route uses Pontiac road: ${restrictivePontiacRoad.name} (${restrictivePontiacRoad.classification.name}, max ${maxTonnage}T)`
-          })
-        } else if (routeClass === 'unknown') {
+        if (routeClass === 'unknown') {
           warnings.push({
             level: 'warning',
             message: '⚠️ This route contains roads not confirmed on Oakland County TOM. Verify against map before routing.'
@@ -483,12 +445,6 @@ function App() {
             <h2>Route Optimizer</h2>
           </div>
 
-          <PontiacRoadManager
-            roads={pontiacRoads}
-            onAddRoad={addPontiacRoad}
-            onDeleteRoad={deletePontiacRoad}
-          />
-
           <RouteInput
             onSearch={handleRouteSearch}
             loading={loading}
@@ -497,6 +453,13 @@ function App() {
           {error && (
             <div className="error-message">
               ⚠️ {error}
+            </div>
+          )}
+
+          {rerouteMessage && (
+            <div className={`reroute-message ${rerouteMessage.startsWith('Warning') ? 'reroute-warning' : 'reroute-info'}`}>
+              {rerouteMessage}
+              <button className="reroute-dismiss" onClick={() => setRerouteMessage(null)}>✕</button>
             </div>
           )}
 
