@@ -72,6 +72,28 @@ function initializeDatabase($pdo) {
             )
         ");
 
+        // Create tom_segments table (imported from SEMCOG / county GIS sources)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS tom_segments (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                road_name     VARCHAR(255),
+                county        VARCHAR(100),
+                classification VARCHAR(50) DEFAULT 'class-a',
+                bmp           DECIMAL(10,6),
+                emp           DECIMAL(10,6),
+                nfc           TINYINT,
+                start_lat     DECIMAL(10,8) NOT NULL,
+                start_lng     DECIMAL(11,8) NOT NULL,
+                end_lat       DECIMAL(10,8) NOT NULL,
+                end_lng       DECIMAL(11,8) NOT NULL,
+                source        VARCHAR(100) DEFAULT 'SEMCOG',
+                imported_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX(road_name),
+                INDEX(county),
+                INDEX(classification)
+            )
+        ");
+
         // Create road_segments table
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS road_segments (
@@ -195,6 +217,11 @@ function dispatch($method, $path, $pdo) {
     if ($method === 'DELETE' && strpos($path, '/segments/') === 0) {
         $id = substr($path, strlen('/segments/'));
         return deleteSegment($pdo, $id);
+    }
+
+    // Get distinct Class A road names (optionally filtered by county)
+    if ($method === 'GET' && $path === '/tom/road-names') {
+        return getTomRoadNames($pdo);
     }
 
     // Find segments near coordinates
@@ -434,6 +461,20 @@ function deleteSegment($pdo, $id) {
     } catch (PDOException $e) {
         http_response_code(500);
         return ['error' => 'Failed to delete segment'];
+    }
+}
+
+function getTomRoadNames($pdo) {
+    try {
+        $stmt = $pdo->query(
+            "SELECT DISTINCT road_name FROM tom_segments
+             WHERE road_name IS NOT NULL AND road_name != ''
+             ORDER BY road_name"
+        );
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        return ['error' => 'Failed to fetch TOM road names'];
     }
 }
 

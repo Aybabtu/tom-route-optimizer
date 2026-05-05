@@ -40,13 +40,29 @@ function App() {
   const segmentsRef = useRef([])
   const routesRef = useRef([])
   const selectedRouteRef = useRef(null)
+  const tomRoadNamesRef = useRef(new Set())
 
   // Keep refs in sync so callbacks always have fresh data
   useEffect(() => { segmentsRef.current = segments }, [segments])
   useEffect(() => { routesRef.current = routes }, [routes])
   useEffect(() => { selectedRouteRef.current = selectedRoute }, [selectedRoute])
 
-  useEffect(() => { loadSegments() }, [])
+  useEffect(() => {
+    loadSegments()
+    loadTomRoadNames()
+  }, [])
+
+  const loadTomRoadNames = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/tom/road-names`)
+      if (!response.ok) return
+      const names = await response.json()
+      tomRoadNamesRef.current = new Set(names.map(n => n.toLowerCase()))
+      console.log(`Loaded ${tomRoadNamesRef.current.size} Class A road names from TOM data`)
+    } catch (e) {
+      console.error('Error loading TOM road names:', e)
+    }
+  }
 
   const loadSegments = async () => {
     try {
@@ -214,19 +230,21 @@ function App() {
     const instruction = step.instructions?.toLowerCase() || ''
     const highway = step.highway
 
-    // Check for Class A: known interstates, US routes, Michigan state routes
-    const isClassA = highway ||
+    // Interstates, US routes, Michigan state routes are always Class A
+    const isStateHighway = highway ||
                      instruction.includes('i-') ||
                      instruction.includes('interstate') ||
                      instruction.includes('us-') ||
                      instruction.includes('us route') ||
                      instruction.includes('m-') ||
                      instruction.match(/\bm\s+\d+/)
+    if (isStateHighway) return 'A'
 
-    if (isClassA) return 'A'
+    // Check against TOM-imported Class A road names
+    for (const name of tomRoadNamesRef.current) {
+      if (instruction.includes(name)) return 'A'
+    }
 
-    // If we can't confidently identify the road, mark as unknown
-    // User can verify against Oakland County TOM map
     return 'unknown'
   }
 
