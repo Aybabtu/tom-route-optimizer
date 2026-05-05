@@ -41,16 +41,36 @@ function App() {
   const routesRef = useRef([])
   const selectedRouteRef = useRef(null)
   const tomRoadNamesRef = useRef(new Set())
+  const restrictedRoadNamesRef = useRef(new Set())
 
   // Keep refs in sync so callbacks always have fresh data
   useEffect(() => { segmentsRef.current = segments }, [segments])
   useEffect(() => { routesRef.current = routes }, [routes])
   useEffect(() => { selectedRouteRef.current = selectedRoute }, [selectedRoute])
+  useEffect(() => { restrictedRoadNamesRef.current = buildRestrictedNamesSet(segments) }, [segments])
 
   useEffect(() => {
     loadSegments()
     loadTomRoadNames()
   }, [])
+
+  // Extract road name from a Google Maps step instruction
+  const extractRoadName = (instructions) => {
+    if (!instructions) return ''
+    const text = instructions.replace(/<[^>]*>/g, '').trim()
+    const m = text.match(/\bonto\s+(.+)/i) || text.match(/\bon\s+(.+)/i)
+    return m ? m[1].trim().toLowerCase() : text.toLowerCase()
+  }
+
+  const buildRestrictedNamesSet = (segs) => {
+    const restricted = new Set()
+    segs.forEach(seg => {
+      if (seg.classification === 'restricted' && seg.road_name) {
+        restricted.add(seg.road_name.toLowerCase())
+      }
+    })
+    return restricted
+  }
 
   const loadTomRoadNames = async () => {
     try {
@@ -79,31 +99,16 @@ function App() {
     }
   }
 
-  const checkAndRerouteIfRestricted = (freshSegments) => {
+  const checkAndRerouteIfRestricted = () => {
     const currentRoutes = routesRef.current
     const currentSelectedId = selectedRouteRef.current
     if (!currentRoutes.length || currentSelectedId === null) return
 
-    const T = 0.0003
-    const findSegmentIn = (segs, startLat, startLng, endLat, endLng) =>
-      segs.find(seg =>
-        Math.abs(parseFloat(seg.start_lat) - startLat) < T &&
-        Math.abs(parseFloat(seg.start_lng) - startLng) < T &&
-        Math.abs(parseFloat(seg.end_lat) - endLat) < T &&
-        Math.abs(parseFloat(seg.end_lng) - endLng) < T
-      ) || null
-
     const routeHasRestricted = (route) =>
-      route.directionsResult.routes[0].legs[0].steps.some(step => {
-        const seg = findSegmentIn(
-          freshSegments,
-          step.start_location.lat(), step.start_location.lng(),
-          step.end_location.lat(), step.end_location.lng()
-        )
-        return seg?.classification === 'restricted'
-      })
+      route.directionsResult.routes[0].legs[0].steps.some(
+        step => classifyStep(step) === 'restricted'
+      )
 
-    // Find the current route by id, not by array index
     const currentRoute = currentRoutes.find(r => r.id === currentSelectedId)
     if (!currentRoute || !routeHasRestricted(currentRoute)) return
 
@@ -128,9 +133,11 @@ function App() {
     const freshSegments = await loadSegments()
     setShowSegmentClassifier(false)
     setRerouteMessage(null)
-    if (segmentData?.classification === 'restricted') {
-      checkAndRerouteIfRestricted(freshSegments)
+    // Update restricted names ref immediately (state update is async)
+    if (freshSegments) {
+      restrictedRoadNamesRef.current = buildRestrictedNamesSet(freshSegments)
     }
+    checkAndRerouteIfRestricted()
   }
 
   const findNearbySegment = (startLat, startLng, endLat, endLng) => {
@@ -148,7 +155,7 @@ function App() {
     const startLng = step.start_location.lng()
     const endLat = step.end_location.lat()
     const endLng = step.end_location.lng()
-    const roadName = step.instructions?.replace(/<[^>]*>/g, '') || ''
+    const roadName = extractRoadName(step.instructions)
 
     const existing = findNearbySegment(startLat, startLng, endLat, endLng)
     if (existing) {
@@ -193,9 +200,12 @@ function App() {
         step.end_location.lat(), step.end_location.lng()
       )
 
+      const classified = classifyStep(step)
       const color = existing
         ? (STEP_COLORS[existing.classification] || '#999')
-        : classifyStep(step) === 'A' ? STEP_COLORS['class-a'] : STEP_COLORS['unclassified']
+        : classified === 'A' ? STEP_COLORS['class-a']
+        : classified === 'restricted' ? STEP_COLORS['restricted']
+        : STEP_COLORS['unclassified']
 
       const polyline = new window.google.maps.Polyline({
         path,
@@ -227,18 +237,18 @@ function App() {
   }
 
   const classifyStep = (step) => {
-    const instruction = step.instructions?.toLowerCase() || ''
-    const highway = step.highway
+    const instruction = (step.instructions || '').replace(/<[^>]*>/g, '').toLowerCase()
+    const roadName = extractRoadName(step.instructions)
+
+    // Restricted road names take highest priority
+    for (const name of restrictedRoadNamesRef.current) {
+      if (roadName === name || roadName.includes(name) || name.includes(roadName)) return 'restricted'
+    }
 
     // Interstates, US routes, Michigan state routes are always Class A
-    const isStateHighway = highway ||
-                     instruction.includes('i-') ||
-                     instruction.includes('interstate') ||
-                     instruction.includes('us-') ||
-                     instruction.includes('us route') ||
-                     instruction.includes('m-') ||
-                     instruction.match(/\bm\s+\d+/)
-    if (isStateHighway) return 'A'
+    if (instruction.includes('i-') || instruction.includes('interstate') ||
+        instruction.includes('us-') || instruction.includes('us route') ||
+        instruction.includes('m-') || /\bm\s+\d+/.test(instruction)) return 'A'
 
     // Check against TOM-imported Class A road names
     for (const name of tomRoadNamesRef.current) {
@@ -443,7 +453,16 @@ function App() {
       setRoutes(processedRoutes)
 
       if (processedRoutes.length > 0) {
-        setSelectedRoute(processedRoutes[0].id)
+        // Prefer a route with no restricted steps
+        const routeHasRestricted = (r) =>
+          r.directionsResult.routes[0].legs[0].steps.some(
+            step => classifyStep(step) === 'restricted'
+          )
+        const best = processedRoutes.find(r => !routeHasRestricted(r)) || processedRoutes[0]
+        setSelectedRoute(best.id)
+        if (routeHasRestricted(processedRoutes[0]) && best.id !== processedRoutes[0].id) {
+          setRerouteMessage(`Selected alternate route to avoid restricted roads — using ${best.summary}`)
+        }
       }
     } catch (err) {
       setError(err.message)

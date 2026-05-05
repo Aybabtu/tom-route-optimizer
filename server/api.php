@@ -104,15 +104,25 @@ function initializeDatabase($pdo) {
                 end_lng DECIMAL(11, 8) NOT NULL,
                 classification VARCHAR(50) NOT NULL,
                 jurisdiction VARCHAR(100),
+                road_name VARCHAR(255),
                 notes TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX(start_lat, start_lng),
                 INDEX(end_lat, end_lng),
                 INDEX(classification),
-                INDEX(jurisdiction)
+                INDEX(jurisdiction),
+                INDEX(road_name)
             )
         ");
+
+        // Migration: add road_name column if table already existed without it
+        try {
+            $pdo->exec("ALTER TABLE road_segments ADD COLUMN road_name VARCHAR(255) AFTER jurisdiction");
+            $pdo->exec("ALTER TABLE road_segments ADD INDEX idx_road_name (road_name)");
+        } catch (PDOException $e) {
+            // Column already exists — ignore
+        }
     } catch (PDOException $e) {
         error_log('Database initialization error: ' . $e->getMessage());
     }
@@ -394,8 +404,8 @@ function addSegment($pdo, $data) {
 
     try {
         $stmt = $pdo->prepare(
-            'INSERT INTO road_segments (start_lat, start_lng, end_lat, end_lng, classification, jurisdiction, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO road_segments (start_lat, start_lng, end_lat, end_lng, classification, jurisdiction, road_name, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['start_lat'],
@@ -404,6 +414,7 @@ function addSegment($pdo, $data) {
             $data['end_lng'],
             $data['classification'],
             $data['jurisdiction'] ?? null,
+            $data['road_name'] ?? null,
             $data['notes'] ?? null
         ]);
 
@@ -421,7 +432,7 @@ function addSegment($pdo, $data) {
 function updateSegment($pdo, $id, $data) {
     try {
         $stmt = $pdo->prepare(
-            'UPDATE road_segments SET start_lat = ?, start_lng = ?, end_lat = ?, end_lng = ?, classification = ?, jurisdiction = ?, notes = ?
+            'UPDATE road_segments SET start_lat = ?, start_lng = ?, end_lat = ?, end_lng = ?, classification = ?, jurisdiction = ?, road_name = ?, notes = ?
              WHERE id = ?'
         );
         $stmt->execute([
@@ -431,6 +442,7 @@ function updateSegment($pdo, $id, $data) {
             $data['end_lng'],
             $data['classification'],
             $data['jurisdiction'] ?? null,
+            $data['road_name'] ?? null,
             $data['notes'] ?? null,
             $id
         ]);

@@ -49,7 +49,8 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
         end_lat: segment.end.lat,
         end_lng: segment.end.lng,
         classification: classification,
-        jurisdiction: segment.jurisdiction || 'Pontiac',
+        jurisdiction: segment.jurisdiction || 'Oakland County',
+        road_name: segment.roadName || null,
         notes: notes || null
       }
 
