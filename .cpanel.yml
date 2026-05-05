@@ -7,5 +7,6 @@ deployment:
     - /bin/cp dist/index.html $DEPLOYPATH/index.html
     - /bin/cp dist/assets/* $DEPLOYPATH/assets/
     - /bin/cp server/api.php $DEPLOYPATH/server/api.php
+    - /bin/cp server/import_tom.php $DEPLOYPATH/server/import_tom.php
     - /bin/chmod -R 755 $DEPLOYPATH
     - /bin/chmod 644 $DEPLOYPATH/server/api.php
