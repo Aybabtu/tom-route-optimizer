@@ -159,7 +159,11 @@ function App() {
 
     const existing = findNearbySegment(startLat, startLng, endLat, endLng)
     if (existing) {
-      setSelectedSegment(existing)
+      // Merge existing segment data with current road name from step
+      setSelectedSegment({
+        ...existing,
+        road_name: roadName  // Capture current road name for matching
+      })
     } else {
       setSelectedSegment({
         start_lat: startLat,

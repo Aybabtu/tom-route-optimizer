@@ -50,7 +50,7 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
         end_lng: segment.end.lng,
         classification: classification,
         jurisdiction: segment.jurisdiction || 'Oakland County',
-        road_name: segment.roadName || null,
+        road_name: segment.road_name || null,
         notes: notes || null
       }
 
@@ -98,8 +98,8 @@ function SegmentClassifier({ segment, onClose, onSegmentAdded }) {
         </div>
 
         <div className="segment-info">
-          {segment.roadName && (
-            <p className="road-name">{segment.roadName}</p>
+          {segment.road_name && (
+            <p className="road-name"><strong>Road:</strong> {segment.road_name}</p>
           )}
           <p className="segment-coords">
             <strong>Start:</strong> {parseFloat(segment.start.lat).toFixed(5)}, {parseFloat(segment.start.lng).toFixed(5)}<br/>
