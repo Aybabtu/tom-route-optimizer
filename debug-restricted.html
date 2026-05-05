@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restricted Routes Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
+        h2 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        button { background: #667eea; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 10px 0; }
+        button:hover { background: #5568d3; }
+        .result { background: #f0f0f0; padding: 15px; margin-top: 10px; border-left: 4px solid #667eea; overflow-x: auto; max-height: 400px; overflow-y: auto; font-size: 12px; }
+        .restricted { border-left-color: #f44336; background: #ffebee; }
+        .success { border-left-color: #4caf50; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #667eea; color: white; }
+        tr:hover { background: #f9f9f9; }
+        .highlight { background: #fff3cd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Restricted Routes Debug Dashboard</h1>
+
+        <div class="section">
+            <h2>1. Check Restricted Segments in Database</h2>
+            <p>View all segments marked as "Restricted"</p>
+            <button onclick="loadRestrictedSegments()">Load Restricted Segments</button>
+            <div id="restricted-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Check All Segments by Classification</h2>
+            <p>View segments grouped by classification</p>
+            <button onclick="loadAllSegments()">Load All Segments</button>
+            <div id="all-segments-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>3. Check TOM Road Names (Class A)</h2>
+            <p>View all Class A roads from SEMCOG import (should have ~X roads)</p>
+            <button onclick="loadTomRoadNames()">Load TOM Road Names</button>
+            <div id="tom-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>4. Test Road Name Matching</h2>
+            <p>Enter a road name to test if it would be matched as restricted</p>
+            <input type="text" id="test-road-name" placeholder="e.g., Main Street" style="padding: 8px; width: 300px; border: 1px solid #ddd; border-radius: 4px;" />
+            <button onclick="testRoadMatch()">Test Matching</button>
+            <div id="match-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>5. Check Database Connection</h2>
+            <p>Verify API is working</p>
+            <button onclick="testHealth()">Test API Health</button>
+            <div id="health-result" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://bidmyroute.com/road_data/tom-route-optimizer/server/api.php';
+
+        function showResult(elementId, data, isError = false, title = '') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = isError ? 'result restricted' : 'result success';
+
+            let html = title ? `<strong>${title}</strong><br/>` : '';
+
+            if (typeof data === 'string') {
+                html += data;
+            } else if (Array.isArray(data)) {
+                if (data.length === 0) {
+                    html += '⚠️ Empty result - no data found';
+                } else {
+                    html += `Found ${data.length} items<br/><br/>`;
+
+                    // If it's an array of objects with road_name
+                    if (data[0] && typeof data[0] === 'object' && data[0].road_name) {
+                        html += '<table><tr><th>ID</th><th>Road Name</th><th>Classification</th><th>Start</th><th>End</th></tr>';
+                        data.forEach(item => {
+                            html += `<tr><td>${item.id}</td><td>${item.road_name || '(none)'}</td><td><strong>${item.classification}</strong></td><td>${item.start_lat.substring(0,8)}, ${item.start_lng.substring(0,8)}</td><td>${item.end_lat.substring(0,8)}, ${item.end_lng.substring(0,8)}</td></tr>`;
+                        });
+                        html += '</table>';
+                    } else if (typeof data[0] === 'string') {
+                        // Road names list
+                        html += '<p>Road names (first 50):</p><pre>' + data.slice(0, 50).join('\n') + '</pre>';
+                        if (data.length > 50) html += `<p>... and ${data.length - 50} more</p>`;
+                    } else {
+                        html += '<pre>' + JSON.stringify(data.slice(0, 5), null, 2) + '</pre>';
+                    }
+                }
+            } else {
+                html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            }
+
+            element.innerHTML = html;
+        }
+
+        async function loadRestrictedSegments() {
+            try {
+                const response = await fetch(`${API_URL}/segments`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const allSegments = await response.json();
+                const restricted = allSegments.filter(s => s.classification === 'restricted');
+
+                showResult('restricted-result', restricted, false,
+                    `Found ${restricted.length} restricted segments (out of ${allSegments.length} total)`);
+            } catch (error) {
+                showResult('restricted-result', error.message, true, 'Error loading restricted segments');
+            }
+        }
+
+        async function loadAllSegments() {
+            try {
+                const response = await fetch(`${API_URL}/segments`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const segments = await response.json();
+
+                const byClass = {};
+                segments.forEach(s => {
+                    if (!byClass[s.classification]) byClass[s.classification] = [];
+                    byClass[s.classification].push(s);
+                });
+
+                let html = '<table><tr><th>Classification</th><th>Count</th><th>Sample</th></tr>';
+                for (const [cls, segs] of Object.entries(byClass)) {
+                    const sample = segs[0];
+                    html += `<tr><td>${cls}</td><td>${segs.length}</td><td>${sample.road_name || '(no road name)'}</td></tr>`;
+                }
+                html += '</table>';
+
+                showResult('all-segments-result', segments, false, html);
+            } catch (error) {
+                showResult('all-segments-result', error.message, true);
+            }
+        }
+
+        async function loadTomRoadNames() {
+            try {
+                const response = await fetch(`${API_URL}/tom/road-names`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const names = await response.json();
+
+                if (typeof names === 'string') {
+                    showResult('tom-result', names, true, 'Got error from API');
+                } else if (Array.isArray(names)) {
+                    showResult('tom-result', names, false,
+                        `Loaded ${names.length} Class A road names from TOM data. (First 50 shown)`);
+                } else {
+                    showResult('tom-result', JSON.stringify(names), true, 'Unexpected response format');
+                }
+            } catch (error) {
+                showResult('tom-result', error.message, true);
+            }
+        }
+
+        function testRoadMatch() {
+            const roadName = document.getElementById('test-road-name').value.toLowerCase();
+            if (!roadName) {
+                alert('Please enter a road name');
+                return;
+            }
+
+            showResult('match-result',
+                `Test would match: "${roadName}"\n\nThis demonstrates the matching logic, but actual matching happens in the app based on:\n- Exact match\n- Contains match\n- Partial match\n\nResults depend on what's in the database restricted segments.`,
+                false, 'Matching Test');
+        }
+
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                showResult('health-result', data, false, 'API is healthy ✓');
+            } catch (error) {
+                showResult('health-result', error.message, true, 'API Health Check Failed');
+            }
+        }
+
+        // Load on page open
+        window.addEventListener('load', () => {
+            testHealth();
+        });
+    </script>
+</body>
+</html>
