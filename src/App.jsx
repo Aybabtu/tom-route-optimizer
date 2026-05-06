@@ -163,10 +163,12 @@ function App() {
 
     // Shift+click adds a waypoint; regular click classifies the segment
     if (event && event.shiftKey) {
-      // Add waypoint at midpoint of this step
+      // Add waypoint at midpoint of this step (as LatLng object)
+      if (!window.google) return
       const midLat = (startLat + endLat) / 2
       const midLng = (startLng + endLng) / 2
-      setWaypoints([...waypoints, { lat: midLat, lng: midLng }])
+      const newWaypoint = new window.google.maps.LatLng(midLat, midLng)
+      setWaypoints([...waypoints, newWaypoint])
       return
     }
 
@@ -266,6 +268,7 @@ function App() {
       map: mapsRef.current,
       title: 'Drag to change start',
       draggable: true,
+      cursor: 'grab',
       icon: {
         path: window.google.maps.SymbolPath.CIRCLE,
         scale: 12,
@@ -287,6 +290,7 @@ function App() {
         map: mapsRef.current,
         title: `Waypoint ${idx + 1} - drag to move, click to remove`,
         draggable: true,
+        cursor: 'grab',
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 10,
@@ -313,6 +317,7 @@ function App() {
       map: mapsRef.current,
       title: 'Drag to change end',
       draggable: true,
+      cursor: 'grab',
       icon: {
         path: window.google.maps.SymbolPath.CIRCLE,
         scale: 12,
@@ -360,12 +365,13 @@ function App() {
 
           const durationMinutes = Math.round(totalDuration / 60)
           const truckCost = durationHours * TRUCK_RATE_PER_HOUR
-          const tonnage = routesRef.current[selectedRouteRef.current]?.tonnage || 0
+          const currentRoute = routesRef.current[selectedRouteRef.current]
+          const tonnage = currentRoute?.tonnage || 0
           const costPerTon = tonnage > 0 ? truckCost / tonnage : 0
           const tonMilesPerHour = tonnage > 0 ? (tonnage * totalDistance) / durationHours : 0
 
           const updatedRoute = {
-            ...routesRef.current[selectedRouteRef.current],
+            ...currentRoute,
             directionsResult: result,
             distance: totalDistance,
             durationHours: durationHours,
@@ -373,8 +379,9 @@ function App() {
             truckCost: truckCost,
             costPerTon: costPerTon,
             tonMilesPerHour: tonMilesPerHour,
-            efficiency: tonMilesPerHour / costPerTon,
-            summary: `Custom Route (${durationMinutes} min, ${totalDistance.toFixed(1)} mi)`
+            efficiency: tonnage > 0 ? tonMilesPerHour / costPerTon : 0,
+            summary: `Custom Route (${durationMinutes} min, ${totalDistance.toFixed(1)} mi)`,
+            tonnage: tonnage // Keep tonnage for future recalcs
           }
 
           const updatedRoutes = [...routesRef.current]
@@ -510,6 +517,7 @@ function App() {
     setError(null)
     setRoutes([])
     setSelectedRoute(null)
+    setWaypoints([]) // Clear waypoints for new search
     stepPolylinesRef.current.forEach(p => p.setMap(null))
     stepPolylinesRef.current = []
 
@@ -599,7 +607,8 @@ function App() {
           efficiency: tonMilesPerHour / costPerTon, // Higher = better
           routeClass: routeClass,
           warnings: warnings,
-          summary: route.summary || `Route ${index + 1}`
+          summary: route.summary || `Route ${index + 1}`,
+          tonnage: tonnage // Store tonnage for drag route recalculation
         }
       })
 
