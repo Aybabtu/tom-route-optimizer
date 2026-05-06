@@ -262,6 +262,9 @@ function App() {
     }
   }
 
+  // Store tonnage and origin/dest for recalculation when dragging
+  const recalcInfoRef = useRef({ tonnage: 0, origin: null, destination: null })
+
   const renderWaypointMarkers = () => {
     if (!mapsRef.current || !window.google || !routeStart || !routeEnd) {
       return
@@ -271,7 +274,7 @@ function App() {
     waypointMarkersRef.current.forEach(marker => marker.setMap(null))
     waypointMarkersRef.current = []
 
-    // Simple test: just create markers without all the options
+    // Start marker
     const startMarker = new window.google.maps.Marker({
       position: routeStart,
       map: mapsRef.current,
@@ -283,6 +286,7 @@ function App() {
     })
     waypointMarkersRef.current.push(startMarker)
 
+    // End marker
     const endMarker = new window.google.maps.Marker({
       position: routeEnd,
       map: mapsRef.current,
@@ -294,7 +298,7 @@ function App() {
     })
     waypointMarkersRef.current.push(endMarker)
 
-    // Waypoint markers
+    // Waypoint markers (Shift+click on route to add)
     waypoints.forEach((wp, idx) => {
       const wpMarker = new window.google.maps.Marker({
         position: wp,
@@ -313,15 +317,126 @@ function App() {
       waypointMarkersRef.current.push(wpMarker)
     })
 
-    console.log('Markers created:', { startMarker, endMarker, waypoints: waypoints.length })
+    console.log('Waypoint markers rendered:', { waypointsCount: waypoints.length })
   }
 
-  // DISABLED: Waypoint markers were causing infinite loop
-  // useEffect(() => {
-  //   renderWaypointMarkers()
-  // DISABLED: Route recalculation was causing infinite loop
-  // This useEffect recalculated routes when dragging waypoints
-  // Commented out to fix app stability - will implement differently
+  // Render markers whenever waypoints or endpoints change
+  useEffect(() => {
+    renderWaypointMarkers()
+  }, [waypoints, routeStart, routeEnd])
+
+  // Store tonnage/origin/dest for recalculation when user drags waypoints
+  useEffect(() => {
+    const activeRoute = routes.find(r => r.id === selectedRoute)
+    if (activeRoute) {
+      const leg = activeRoute.directionsResult.routes[0].legs[0]
+      recalcInfoRef.current = {
+        tonnage: activeRoute.tonnage,
+        origin: leg.start_location,
+        destination: leg.end_location
+      }
+      console.log('Stored recalc info:', recalcInfoRef.current)
+    }
+  }, [selectedRoute, routes])
+
+  // Recalculate route when user drags waypoints (but skip initial render)
+  const prevWaypointsRef = useRef(null)
+  useEffect(() => {
+    if (!prevWaypointsRef.current) {
+      prevWaypointsRef.current = waypoints
+      return
+    }
+
+    // Only recalculate if waypoints actually changed AND we have recalc info
+    if (waypoints.length > 0 && recalcInfoRef.current.tonnage > 0) {
+      console.log('Waypoints changed, recalculating with waypoints:', waypoints.length)
+      recalculateWithWaypoints(waypoints)
+    }
+    prevWaypointsRef.current = waypoints
+  }, [waypoints])
+
+  const recalculateWithWaypoints = async (waypointsToUse) => {
+    if (!directionsServiceRef.current) return
+
+    const { origin, destination, tonnage } = recalcInfoRef.current
+    if (!origin || !destination) return
+
+    setLoading(true)
+    try {
+      const result = await new Promise((resolve, reject) => {
+        directionsServiceRef.current.route(
+          {
+            origin: origin,
+            destination: destination,
+            waypoints: waypointsToUse.map(wp => ({
+              location: wp,
+              stopover: true
+            })),
+            travelMode: 'DRIVING',
+            provideRouteAlternatives: true,
+          },
+          (result, status) => {
+            if (status === 'OK') {
+              resolve(result)
+            } else {
+              reject(new Error(`Recalculation failed: ${status}`))
+            }
+          }
+        )
+      })
+
+      // Reprocess routes (same logic as handleRouteSearch)
+      const processedRoutes = result.routes.map((route, index) => {
+        const leg = route.legs[0]
+        const durationSeconds = leg.duration.value
+        const durationHours = durationSeconds / 3600
+        const distance = leg.distance.value / 1609.34
+
+        const stepClasses = leg.steps?.map(s => classifyStep(s)) || []
+        const hasUnknown = stepClasses.includes('unknown')
+        const hasNonA = stepClasses.some(c => c !== 'A')
+        const routeClass = hasUnknown ? 'unknown' : (hasNonA ? 'B' : 'A')
+
+        const truckCost = durationHours * TRUCK_RATE_PER_HOUR
+        const costPerTon = truckCost / tonnage
+        const tonMilesPerHour = (tonnage * distance) / durationHours
+
+        const routeOnlyResult = {
+          ...result,
+          routes: [route]
+        }
+
+        return {
+          id: index,
+          directionsResult: routeOnlyResult,
+          routeIndex: 0,
+          distance: distance,
+          durationHours: durationHours,
+          durationMinutes: Math.round(durationSeconds / 60),
+          truckCost: truckCost,
+          costPerTon: costPerTon,
+          tonMilesPerHour: tonMilesPerHour,
+          efficiency: tonMilesPerHour / costPerTon,
+          routeClass: routeClass,
+          warnings: [],
+          summary: route.summary || `Route ${index + 1}`,
+          tonnage: tonnage
+        }
+      })
+
+      processedRoutes.sort((a, b) => b.efficiency - a.efficiency)
+      setRoutes(processedRoutes)
+      if (processedRoutes.length > 0) {
+        setSelectedRoute(processedRoutes[0].id)
+      }
+      console.log('Recalculated with waypoints:', processedRoutes.length, 'routes')
+    } catch (err) {
+      console.error('Error recalculating:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const classifyStep = (step) => {
     const instruction = (step.instructions || '').replace(/<[^>]*>/g, '').toLowerCase()
