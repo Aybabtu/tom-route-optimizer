@@ -457,13 +457,18 @@ function App() {
   }, [segments])
 
   useEffect(() => {
+    console.log('Route rendering useEffect triggered:', { selectedRoute, routesCount: routes.length })
     const activeRoute = routes.find(r => r.id === selectedRoute)
+    console.log('Active route found:', activeRoute ? 'yes' : 'no')
 
     if (!mapsRef.current || !activeRoute) {
+      console.log('Missing map or active route, clearing polylines')
       stepPolylinesRef.current.forEach(p => p.setMap(null))
       stepPolylinesRef.current = []
       return
     }
+
+    console.log('Proceeding to render route')
 
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setMap(null)
@@ -509,6 +514,10 @@ function App() {
 
       // Set draggable start/end points for this route
       const leg = activeRoute.directionsResult.routes[0].legs[0]
+      console.log('Setting route start/end:', {
+        start: leg.start_location?.toJSON?.(),
+        end: leg.end_location?.toJSON?.()
+      })
       setRouteStart(leg.start_location)
       setRouteEnd(leg.end_location)
       setWaypoints([]) // Clear intermediate waypoints
