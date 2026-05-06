@@ -46,6 +46,7 @@ function App() {
   const selectedRouteRef = useRef(null)
   const tomRoadNamesRef = useRef(new Set())
   const restrictedRoadNamesRef = useRef(new Set())
+  const shiftKeyPressedRef = useRef(false)
 
   // Keep refs in sync so callbacks always have fresh data
   useEffect(() => { segmentsRef.current = segments }, [segments])
@@ -56,6 +57,20 @@ function App() {
   useEffect(() => {
     loadSegments()
     loadTomRoadNames()
+
+    // Track shift key for Shift+click on routes
+    const handleKeyDown = (e) => {
+      if (e.key === 'Shift') shiftKeyPressedRef.current = true
+    }
+    const handleKeyUp = (e) => {
+      if (e.key === 'Shift') shiftKeyPressedRef.current = false
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
   }, [])
 
   // Extract road name from a Google Maps step instruction
@@ -165,15 +180,16 @@ function App() {
     const endLat = step.end_location.lat()
     const endLng = step.end_location.lng()
     const roadName = extractRoadName(step.instructions)
-    console.log('handleStepClick - extracted road name:', { roadName, instruction: step.instructions })
+    console.log('handleStepClick:', { shiftPressed: shiftKeyPressedRef.current, roadName })
 
     // Shift+click adds a waypoint; regular click classifies the segment
-    if (event && event.shiftKey) {
+    if (shiftKeyPressedRef.current) {
       // Add waypoint at midpoint of this step (as LatLng object)
       if (!window.google) return
       const midLat = (startLat + endLat) / 2
       const midLng = (startLng + endLng) / 2
       const newWaypoint = new window.google.maps.LatLng(midLat, midLng)
+      console.log('Adding waypoint at:', { midLat, midLng })
       setWaypoints([...waypoints, newWaypoint])
       return
     }
@@ -274,50 +290,81 @@ function App() {
     waypointMarkersRef.current.forEach(marker => marker.setMap(null))
     waypointMarkersRef.current = []
 
-    // Start marker
+    // Start marker (GREEN)
     const startMarker = new window.google.maps.Marker({
       position: routeStart,
       map: mapsRef.current,
-      title: 'START',
-      draggable: true
+      title: 'START (drag to move)',
+      draggable: true,
+      zIndex: 100,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#4caf50',
+        fillOpacity: 0.9,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      }
     })
     startMarker.addListener('dragend', (e) => {
+      console.log('Start marker dragged')
       setRouteStart(e.latLng)
     })
     waypointMarkersRef.current.push(startMarker)
 
-    // End marker
+    // End marker (RED)
     const endMarker = new window.google.maps.Marker({
       position: routeEnd,
       map: mapsRef.current,
-      title: 'END',
-      draggable: true
+      title: 'END (drag to move)',
+      draggable: true,
+      zIndex: 100,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#f44336',
+        fillOpacity: 0.9,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      }
     })
     endMarker.addListener('dragend', (e) => {
+      console.log('End marker dragged')
       setRouteEnd(e.latLng)
     })
     waypointMarkersRef.current.push(endMarker)
 
-    // Waypoint markers (Shift+click on route to add)
+    // Waypoint markers (YELLOW - Shift+click on route to add, click to delete)
     waypoints.forEach((wp, idx) => {
       const wpMarker = new window.google.maps.Marker({
         position: wp,
         map: mapsRef.current,
-        title: `Waypoint ${idx + 1}`,
-        draggable: true
+        title: `Waypoint ${idx + 1} (drag to move, click to delete)`,
+        draggable: true,
+        zIndex: 99,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#ffeb3b',
+          fillOpacity: 0.9,
+          strokeColor: '#333',
+          strokeWeight: 2,
+        }
       })
       wpMarker.addListener('dragend', (e) => {
+        console.log('Waypoint', idx, 'dragged to', e.latLng)
         const newWaypoints = [...waypoints]
         newWaypoints[idx] = e.latLng
         setWaypoints(newWaypoints)
       })
       wpMarker.addListener('click', () => {
+        console.log('Deleting waypoint', idx)
         setWaypoints(waypoints.filter((_, i) => i !== idx))
       })
       waypointMarkersRef.current.push(wpMarker)
     })
 
-    console.log('Waypoint markers rendered:', { waypointsCount: waypoints.length })
+    console.log('Waypoint markers rendered:', { start: startMarker ? 'yes' : 'no', end: endMarker ? 'yes' : 'no', waypoints: waypoints.length })
   }
 
   // Render markers whenever waypoints or endpoints change
