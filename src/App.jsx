@@ -280,6 +280,7 @@ function App() {
 
   // Store tonnage and origin/dest for recalculation when dragging
   const recalcInfoRef = useRef({ tonnage: 0, origin: null, destination: null })
+  const isRecalculatingRef = useRef(false) // Track if routes came from waypoint recalc (not new search)
 
   const renderWaypointMarkers = () => {
     if (!mapsRef.current || !window.google || !routeStart || !routeEnd) {
@@ -472,6 +473,7 @@ function App() {
       })
 
       processedRoutes.sort((a, b) => b.efficiency - a.efficiency)
+      isRecalculatingRef.current = true // Flag that this is a recalculation, not a new search
       setRoutes(processedRoutes)
       if (processedRoutes.length > 0) {
         setSelectedRoute(processedRoutes[0].id)
@@ -613,7 +615,11 @@ function App() {
       })
       setRouteStart(leg.start_location)
       setRouteEnd(leg.end_location)
-      setWaypoints([]) // Clear intermediate waypoints
+      // Only clear waypoints if this is a new search (not a recalculation)
+      if (!isRecalculatingRef.current) {
+        setWaypoints([])
+      }
+      isRecalculatingRef.current = false // Reset flag
     }
   }, [selectedRoute, routes])
 
@@ -623,6 +629,7 @@ function App() {
       return
     }
 
+    isRecalculatingRef.current = false // This is a new search, not a recalculation
     setLoading(true)
     setError(null)
     setRoutes([])
