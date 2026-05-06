@@ -257,7 +257,6 @@ function App() {
 
   const renderWaypointMarkers = () => {
     if (!mapsRef.current || !window.google || !routeStart || !routeEnd) {
-      console.warn('Cannot render waypoints - missing:', { map: !!mapsRef.current, google: !!window.google, start: !!routeStart, end: !!routeEnd })
       return
     }
 
@@ -265,65 +264,49 @@ function App() {
     waypointMarkersRef.current.forEach(marker => marker.setMap(null))
     waypointMarkersRef.current = []
 
-    console.log('🟢 Creating START marker')
-    try {
-      const startMarker = new window.google.maps.Marker({
-        position: routeStart,
-        map: mapsRef.current,
-        title: 'START - Drag to change',
-        draggable: true,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
-      })
-      startMarker.addListener('dragend', (e) => {
-        setRouteStart(e.latLng)
-      })
-      waypointMarkersRef.current.push(startMarker)
-      console.log('✓ START marker created successfully')
-    } catch (err) {
-      console.error('✗ Error creating START marker:', err)
-    }
+    // Simple test: just create markers without all the options
+    const startMarker = new window.google.maps.Marker({
+      position: routeStart,
+      map: mapsRef.current,
+      title: 'START',
+      draggable: true
+    })
+    startMarker.addListener('dragend', (e) => {
+      setRouteStart(e.latLng)
+    })
+    waypointMarkersRef.current.push(startMarker)
 
-    console.log('🔴 Creating END marker')
-    try {
-      const endMarker = new window.google.maps.Marker({
-        position: routeEnd,
-        map: mapsRef.current,
-        title: 'END - Drag to change',
-        draggable: true,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
-      })
-      endMarker.addListener('dragend', (e) => {
-        setRouteEnd(e.latLng)
-      })
-      waypointMarkersRef.current.push(endMarker)
-      console.log('✓ END marker created successfully')
-    } catch (err) {
-      console.error('✗ Error creating END marker:', err)
-    }
+    const endMarker = new window.google.maps.Marker({
+      position: routeEnd,
+      map: mapsRef.current,
+      title: 'END',
+      draggable: true
+    })
+    endMarker.addListener('dragend', (e) => {
+      setRouteEnd(e.latLng)
+    })
+    waypointMarkersRef.current.push(endMarker)
 
     // Waypoint markers
     waypoints.forEach((wp, idx) => {
-      try {
-        const wpMarker = new window.google.maps.Marker({
-          position: wp,
-          map: mapsRef.current,
-          title: `Waypoint ${idx + 1}`,
-          draggable: true,
-          icon: 'http://maps.google.com/mapfiles/ms/icons/orange-dot.png'
-        })
-        wpMarker.addListener('dragend', (e) => {
-          const newWaypoints = [...waypoints]
-          newWaypoints[idx] = e.latLng
-          setWaypoints(newWaypoints)
-        })
-        wpMarker.addListener('click', () => {
-          setWaypoints(waypoints.filter((_, i) => i !== idx))
-        })
-        waypointMarkersRef.current.push(wpMarker)
-      } catch (err) {
-        console.error(`✗ Error creating waypoint ${idx}:`, err)
-      }
+      const wpMarker = new window.google.maps.Marker({
+        position: wp,
+        map: mapsRef.current,
+        title: `Waypoint ${idx + 1}`,
+        draggable: true
+      })
+      wpMarker.addListener('dragend', (e) => {
+        const newWaypoints = [...waypoints]
+        newWaypoints[idx] = e.latLng
+        setWaypoints(newWaypoints)
+      })
+      wpMarker.addListener('click', () => {
+        setWaypoints(waypoints.filter((_, i) => i !== idx))
+      })
+      waypointMarkersRef.current.push(wpMarker)
     })
+
+    console.log('Markers created:', { startMarker, endMarker, waypoints: waypoints.length })
   }
 
   // Render waypoint markers when they change
