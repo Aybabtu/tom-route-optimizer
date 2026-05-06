@@ -309,19 +309,19 @@ function App() {
     console.log('Markers created:', { startMarker, endMarker, waypoints: waypoints.length })
   }
 
-  // Render waypoint markers when they change
-  useEffect(() => {
-    renderWaypointMarkers()
-  }, [routeStart, routeEnd, waypoints])
+  // DISABLED: Waypoint markers were causing infinite loop
+  // useEffect(() => {
+  //   renderWaypointMarkers()
+  // }, [routeStart, routeEnd, waypoints])
 
-  // Recalculate route when waypoints change
-  useEffect(() => {
-    if (!routeStart || !routeEnd || !directionsServiceRef.current) return
+  // DISABLED: Route recalculation was causing infinite loop with markers
+  // useEffect(() => {
+  //   if (!routeStart || !routeEnd || !directionsServiceRef.current) return
 
-    const waypointArray = waypoints.map(wp => ({
-      location: wp,
-      stopover: true
-    }))
+  //   const waypointArray = waypoints.map(wp => ({
+  //     location: wp,
+  //     stopover: true
+  //   }))
 
     directionsServiceRef.current.route(
       {
@@ -366,7 +366,8 @@ function App() {
         }
       }
     )
-  }, [routeStart, routeEnd, waypoints])
+  // }, [routeStart, routeEnd, waypoints])
+  // })
 
   const classifyStep = (step) => {
     const instruction = (step.instructions || '').replace(/<[^>]*>/g, '').toLowerCase()
