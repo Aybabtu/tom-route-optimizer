@@ -422,7 +422,17 @@ function App() {
     if (!directionsServiceRef.current) return
 
     const { origin, destination, tonnage } = recalcInfoRef.current
-    if (!origin || !destination) return
+    if (!origin || !destination) {
+      console.error('Missing origin or destination in recalcInfoRef:', recalcInfoRef.current)
+      return
+    }
+
+    console.log('Recalculating with:', {
+      origin: origin?.toJSON?.() || origin,
+      destination: destination?.toJSON?.() || destination,
+      waypointCount: waypointsToUse.length,
+      tonnage
+    })
 
     setLoading(true)
     try {
@@ -431,10 +441,13 @@ function App() {
           {
             origin: origin,
             destination: destination,
-            waypoints: waypointsToUse.map(wp => ({
-              location: wp,
-              stopover: true
-            })),
+            waypoints: waypointsToUse.map((wp, idx) => {
+              console.log(`Waypoint ${idx}:`, wp?.toJSON?.() || wp)
+              return {
+                location: wp,
+                stopover: true
+              }
+            }),
             travelMode: 'DRIVING',
             provideRouteAlternatives: true,
           },
