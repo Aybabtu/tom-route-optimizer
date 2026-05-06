@@ -227,48 +227,51 @@ function App() {
 
     if (!mapsRef.current || !window.google || !routeData) return
 
-    const leg = routeData.directionsResult.routes[0].legs[0]
+    const route = routeData.directionsResult.routes[0]
 
-    leg.steps.forEach(step => {
-      let path
-      if (step.polyline?.points) {
-        path = window.google.maps.geometry.encoding.decodePath(step.polyline.points)
-      } else {
-        path = step.path?.length > 1 ? step.path : [step.start_location, step.end_location]
-      }
+    // Iterate through ALL legs (waypoints create multiple legs)
+    route.legs.forEach((leg, legIdx) => {
+      leg.steps.forEach(step => {
+        let path
+        if (step.polyline?.points) {
+          path = window.google.maps.geometry.encoding.decodePath(step.polyline.points)
+        } else {
+          path = step.path?.length > 1 ? step.path : [step.start_location, step.end_location]
+        }
 
-      const existing = findNearbySegment(
-        step.start_location.lat(), step.start_location.lng(),
-        step.end_location.lat(), step.end_location.lng()
-      )
+        const existing = findNearbySegment(
+          step.start_location.lat(), step.start_location.lng(),
+          step.end_location.lat(), step.end_location.lng()
+        )
 
-      const classified = classifyStep(step)
-      const color = existing
-        ? (STEP_COLORS[existing.classification] || '#999')
-        : classified === 'A' ? STEP_COLORS['class-a']
-        : classified === 'restricted' ? STEP_COLORS['restricted']
-        : STEP_COLORS['unclassified']
+        const classified = classifyStep(step)
+        const color = existing
+          ? (STEP_COLORS[existing.classification] || '#999')
+          : classified === 'A' ? STEP_COLORS['class-a']
+          : classified === 'restricted' ? STEP_COLORS['restricted']
+          : STEP_COLORS['unclassified']
 
-      const polyline = new window.google.maps.Polyline({
-        path,
-        geodesic: true,
-        strokeColor: color,
-        strokeOpacity: 0.85,
-        strokeWeight: 6,
-        map: mapsRef.current,
-        clickable: true,
-        zIndex: 60,
+        const polyline = new window.google.maps.Polyline({
+          path,
+          geodesic: true,
+          strokeColor: color,
+          strokeOpacity: 0.85,
+          strokeWeight: 6,
+          map: mapsRef.current,
+          clickable: true,
+          zIndex: 60,
+        })
+
+        polyline.addListener('mouseover', () => {
+          polyline.setOptions({ strokeWeight: 9, strokeOpacity: 1 })
+        })
+        polyline.addListener('mouseout', () => {
+          polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.85 })
+        })
+        polyline.addListener('click', (event) => handleStepClick(step, event))
+
+        stepPolylinesRef.current.push(polyline)
       })
-
-      polyline.addListener('mouseover', () => {
-        polyline.setOptions({ strokeWeight: 9, strokeOpacity: 1 })
-      })
-      polyline.addListener('mouseout', () => {
-        polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.85 })
-      })
-      polyline.addListener('click', (event) => handleStepClick(step, event))
-
-      stepPolylinesRef.current.push(polyline)
     })
   }
 
