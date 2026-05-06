@@ -161,6 +161,7 @@ function App() {
     const endLat = step.end_location.lat()
     const endLng = step.end_location.lng()
     const roadName = extractRoadName(step.instructions)
+    console.log('handleStepClick - extracted road name:', { roadName, instruction: step.instructions })
 
     // Shift+click adds a waypoint; regular click classifies the segment
     if (event && event.shiftKey) {
@@ -176,6 +177,7 @@ function App() {
     const existing = findNearbySegment(startLat, startLng, endLat, endLng)
     if (existing) {
       // Merge existing segment data with current road name from step
+      console.log('Editing existing segment, road_name being set to:', roadName)
       setSelectedSegment({
         ...existing,
         road_name: roadName  // Capture current road name for matching
