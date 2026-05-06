@@ -260,9 +260,20 @@ function App() {
     waypointMarkersRef.current.forEach(marker => marker.setMap(null))
     waypointMarkersRef.current = []
 
-    if (!mapsRef.current || !window.google || !routeStart || !routeEnd) return
+    console.log('renderWaypointMarkers called:', {
+      hasMap: !!mapsRef.current,
+      hasGoogle: !!window.google,
+      routeStart: routeStart?.toJSON?.(),
+      routeEnd: routeEnd?.toJSON?.()
+    })
+
+    if (!mapsRef.current || !window.google || !routeStart || !routeEnd) {
+      console.log('Missing required data, returning early')
+      return
+    }
 
     // Start marker (green)
+    console.log('Creating start marker at:', routeStart?.toJSON?.())
     const startMarker = new window.google.maps.Marker({
       position: routeStart,
       map: mapsRef.current,
@@ -273,9 +284,11 @@ function App() {
         color: '#fff',
         fontSize: '20px'
       },
-      icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+      icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
     })
+    console.log('Start marker created:', startMarker)
     startMarker.addListener('dragend', (e) => {
+      console.log('Start marker dragged to:', e.latLng.toJSON())
       setRouteStart(e.latLng)
     })
     waypointMarkersRef.current.push(startMarker)
@@ -293,7 +306,7 @@ function App() {
           fontSize: '14px',
           fontWeight: 'bold'
         },
-        icon: 'http://maps.google.com/mapfiles/ms/icons/orange-dot.png'
+        icon: 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png'
       })
       wpMarker.addListener('dragend', (e) => {
         const newWaypoints = [...waypoints]
@@ -307,6 +320,7 @@ function App() {
     })
 
     // End marker (red)
+    console.log('Creating end marker at:', routeEnd?.toJSON?.())
     const endMarker = new window.google.maps.Marker({
       position: routeEnd,
       map: mapsRef.current,
@@ -317,9 +331,11 @@ function App() {
         color: '#fff',
         fontSize: '20px'
       },
-      icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+      icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
     })
+    console.log('End marker created:', endMarker)
     endMarker.addListener('dragend', (e) => {
+      console.log('End marker dragged to:', e.latLng.toJSON())
       setRouteEnd(e.latLng)
     })
     waypointMarkersRef.current.push(endMarker)
