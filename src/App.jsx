@@ -297,7 +297,7 @@ function App() {
       map: mapsRef.current,
       title: 'START (drag to move)',
       draggable: true,
-      zIndex: 100,
+      zIndex: 1000,
       icon: {
         path: window.google.maps.SymbolPath.CIRCLE,
         scale: 12,
@@ -308,7 +308,7 @@ function App() {
       }
     })
     startMarker.addListener('dragend', (e) => {
-      console.log('Start marker dragged')
+      console.log('Start marker dragged to', e.latLng)
       setRouteStart(e.latLng)
     })
     waypointMarkersRef.current.push(startMarker)
@@ -319,7 +319,7 @@ function App() {
       map: mapsRef.current,
       title: 'END (drag to move)',
       draggable: true,
-      zIndex: 100,
+      zIndex: 1000,
       icon: {
         path: window.google.maps.SymbolPath.CIRCLE,
         scale: 12,
@@ -330,7 +330,7 @@ function App() {
       }
     })
     endMarker.addListener('dragend', (e) => {
-      console.log('End marker dragged')
+      console.log('End marker dragged to', e.latLng)
       setRouteEnd(e.latLng)
     })
     waypointMarkersRef.current.push(endMarker)
@@ -342,7 +342,7 @@ function App() {
         map: mapsRef.current,
         title: `Waypoint ${idx + 1} (drag to move, click to delete)`,
         draggable: true,
-        zIndex: 99,
+        zIndex: 999,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 10,
@@ -387,6 +387,10 @@ function App() {
     }
   }, [selectedRoute, routes])
 
+  // Track if start/end drag is from user (not route update)
+  const prevStartRef = useRef(null)
+  const prevEndRef = useRef(null)
+
   // Recalculate route when user drags waypoints (but skip initial render)
   const prevWaypointsRef = useRef(null)
   useEffect(() => {
@@ -402,6 +406,29 @@ function App() {
     }
     prevWaypointsRef.current = waypoints
   }, [waypoints])
+
+  // Recalculate when start/end markers are dragged (skip initial setting from route)
+  useEffect(() => {
+    if (!prevStartRef.current || !prevEndRef.current) {
+      prevStartRef.current = routeStart
+      prevEndRef.current = routeEnd
+      return
+    }
+
+    // Check if position actually changed (not just reference)
+    const startChanged = routeStart && prevStartRef.current &&
+      (routeStart.lat() !== prevStartRef.current.lat() || routeStart.lng() !== prevStartRef.current.lng())
+    const endChanged = routeEnd && prevEndRef.current &&
+      (routeEnd.lat() !== prevEndRef.current.lat() || routeEnd.lng() !== prevEndRef.current.lng())
+
+    if ((startChanged || endChanged) && recalcInfoRef.current.tonnage > 0) {
+      console.log('Start/end markers dragged, recalculating with waypoints:', waypoints.length)
+      recalculateWithWaypoints(waypoints)
+    }
+
+    prevStartRef.current = routeStart
+    prevEndRef.current = routeEnd
+  }, [routeStart, routeEnd, waypoints])
 
   const recalculateWithWaypoints = async (waypointsToUse) => {
     if (!directionsServiceRef.current) return
