@@ -312,62 +312,9 @@ function App() {
   // DISABLED: Waypoint markers were causing infinite loop
   // useEffect(() => {
   //   renderWaypointMarkers()
-  // }, [routeStart, routeEnd, waypoints])
-
-  // DISABLED: Route recalculation was causing infinite loop with markers
-  // useEffect(() => {
-  //   if (!routeStart || !routeEnd || !directionsServiceRef.current) return
-
-  //   const waypointArray = waypoints.map(wp => ({
-  //     location: wp,
-  //     stopover: true
-  //   }))
-
-    directionsServiceRef.current.route(
-      {
-        origin: routeStart,
-        destination: routeEnd,
-        waypoints: waypointArray.length > 0 ? waypointArray : undefined,
-        travelMode: 'DRIVING',
-        provideRouteAlternatives: true,
-      },
-      (result, status) => {
-        if (status === 'OK') {
-          // Update the current route with dragged version
-          const leg = result.routes[0].legs
-          const totalDistance = leg.reduce((sum, l) => sum + l.distance.value, 0) / 1609.34
-          const totalDuration = leg.reduce((sum, l) => sum + l.duration.value, 0)
-          const durationHours = totalDuration / 3600
-
-          const durationMinutes = Math.round(totalDuration / 60)
-          const truckCost = durationHours * TRUCK_RATE_PER_HOUR
-          const currentRoute = routesRef.current[selectedRouteRef.current]
-          const tonnage = currentRoute?.tonnage || 0
-          const costPerTon = tonnage > 0 ? truckCost / tonnage : 0
-          const tonMilesPerHour = tonnage > 0 ? (tonnage * totalDistance) / durationHours : 0
-
-          const updatedRoute = {
-            ...currentRoute,
-            directionsResult: result,
-            distance: totalDistance,
-            durationHours: durationHours,
-            durationMinutes: durationMinutes,
-            truckCost: truckCost,
-            costPerTon: costPerTon,
-            tonMilesPerHour: tonMilesPerHour,
-            efficiency: tonnage > 0 ? tonMilesPerHour / costPerTon : 0,
-            summary: `Custom Route (${durationMinutes} min, ${totalDistance.toFixed(1)} mi)`,
-            tonnage: tonnage // Keep tonnage for future recalcs
-          }
-
-          const updatedRoutes = [...routesRef.current]
-          updatedRoutes[selectedRouteRef.current] = updatedRoute
-          setRoutes(updatedRoutes)
-        }
-      }
-    )
-  // }, [routeStart, routeEnd, waypoints])
-  // })
+  // DISABLED: Route recalculation was causing infinite loop
+  // This useEffect recalculated routes when dragging waypoints
+  // Commented out to fix app stability - will implement differently
 
   const classifyStep = (step) => {
     const instruction = (step.instructions || '').replace(/<[^>]*>/g, '').toLowerCase()
