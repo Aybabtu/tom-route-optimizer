@@ -73,6 +73,7 @@ function App() {
         restricted.add(seg.road_name.toLowerCase())
       }
     })
+    console.log('Restricted roads built from segments:', Array.from(restricted), '(from', segs.length, 'segments)')
     return restricted
   }
 
@@ -322,7 +323,15 @@ function App() {
 
     // Restricted road names take highest priority
     for (const name of restrictedRoadNamesRef.current) {
-      if (roadName === name || roadName.includes(name) || name.includes(roadName)) return 'restricted'
+      if (roadName === name || roadName.includes(name) || name.includes(roadName)) {
+        console.log('RESTRICTED MATCH:', { roadName, restrictedName: name, instruction })
+        return 'restricted'
+      }
+    }
+
+    // Log road names we're checking against restrictions (for debugging)
+    if (restrictedRoadNamesRef.current.size > 0) {
+      console.log('Checked step:', { roadName, restrictedCount: restrictedRoadNamesRef.current.size, instruction })
     }
 
     // Interstates, US routes, Michigan state routes are always Class A
