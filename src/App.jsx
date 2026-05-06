@@ -31,10 +31,14 @@ function App() {
   const [selectedSegment, setSelectedSegment] = useState(null)
   const [showSegmentClassifier, setShowSegmentClassifier] = useState(false)
   const [rerouteMessage, setRerouteMessage] = useState(null)
+  const [waypoints, setWaypoints] = useState([]) // Intermediate waypoints for draggable routing
+  const [routeStart, setRouteStart] = useState(null)
+  const [routeEnd, setRouteEnd] = useState(null)
   const mapsRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
   const markersRef = useRef([])
+  const waypointMarkersRef = useRef([])
   const segmentPolylinesRef = useRef([])
   const stepPolylinesRef = useRef([])
   const segmentsRef = useRef([])
@@ -150,12 +154,21 @@ function App() {
     ) || null
   }
 
-  const handleStepClick = (step) => {
+  const handleStepClick = (step, event) => {
     const startLat = step.start_location.lat()
     const startLng = step.start_location.lng()
     const endLat = step.end_location.lat()
     const endLng = step.end_location.lng()
     const roadName = extractRoadName(step.instructions)
+
+    // Shift+click adds a waypoint; regular click classifies the segment
+    if (event && event.shiftKey) {
+      // Add waypoint at midpoint of this step
+      const midLat = (startLat + endLat) / 2
+      const midLng = (startLng + endLng) / 2
+      setWaypoints([...waypoints, { lat: midLat, lng: midLng }])
+      return
+    }
 
     const existing = findNearbySegment(startLat, startLng, endLat, endLng)
     if (existing) {
@@ -228,7 +241,7 @@ function App() {
       polyline.addListener('mouseout', () => {
         polyline.setOptions({ strokeWeight: 6, strokeOpacity: 0.85 })
       })
-      polyline.addListener('click', () => handleStepClick(step))
+      polyline.addListener('click', (event) => handleStepClick(step, event))
 
       stepPolylinesRef.current.push(polyline)
     })
@@ -239,6 +252,138 @@ function App() {
       directionsServiceRef.current = new window.google.maps.DirectionsService()
     }
   }
+
+  const renderWaypointMarkers = () => {
+    // Clear old waypoint markers
+    waypointMarkersRef.current.forEach(marker => marker.setMap(null))
+    waypointMarkersRef.current = []
+
+    if (!mapsRef.current || !window.google || !routeStart || !routeEnd) return
+
+    // Start marker (green)
+    const startMarker = new window.google.maps.Marker({
+      position: routeStart,
+      map: mapsRef.current,
+      title: 'Drag to change start',
+      draggable: true,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#4caf50',
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      },
+    })
+    startMarker.addListener('dragend', (e) => {
+      setRouteStart(e.latLng)
+    })
+    waypointMarkersRef.current.push(startMarker)
+
+    // Intermediate waypoint markers
+    waypoints.forEach((wp, idx) => {
+      const wpMarker = new window.google.maps.Marker({
+        position: wp,
+        map: mapsRef.current,
+        title: `Waypoint ${idx + 1} - drag to move, click to remove`,
+        draggable: true,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#ff9800',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+        },
+      })
+      wpMarker.addListener('dragend', (e) => {
+        const newWaypoints = [...waypoints]
+        newWaypoints[idx] = e.latLng
+        setWaypoints(newWaypoints)
+      })
+      wpMarker.addListener('click', () => {
+        setWaypoints(waypoints.filter((_, i) => i !== idx))
+      })
+      waypointMarkersRef.current.push(wpMarker)
+    })
+
+    // End marker (red)
+    const endMarker = new window.google.maps.Marker({
+      position: routeEnd,
+      map: mapsRef.current,
+      title: 'Drag to change end',
+      draggable: true,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#f44336',
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      },
+    })
+    endMarker.addListener('dragend', (e) => {
+      setRouteEnd(e.latLng)
+    })
+    waypointMarkersRef.current.push(endMarker)
+  }
+
+  // Render waypoint markers when they change
+  useEffect(() => {
+    renderWaypointMarkers()
+  }, [routeStart, routeEnd, waypoints])
+
+  // Recalculate route when waypoints change
+  useEffect(() => {
+    if (!routeStart || !routeEnd || !directionsServiceRef.current) return
+
+    const waypointArray = waypoints.map(wp => ({
+      location: wp,
+      stopover: true
+    }))
+
+    directionsServiceRef.current.route(
+      {
+        origin: routeStart,
+        destination: routeEnd,
+        waypoints: waypointArray.length > 0 ? waypointArray : undefined,
+        travelMode: 'DRIVING',
+        provideRouteAlternatives: true,
+      },
+      (result, status) => {
+        if (status === 'OK') {
+          // Update the current route with dragged version
+          const leg = result.routes[0].legs
+          const totalDistance = leg.reduce((sum, l) => sum + l.distance.value, 0) / 1609.34
+          const totalDuration = leg.reduce((sum, l) => sum + l.duration.value, 0)
+          const durationHours = totalDuration / 3600
+
+          const durationMinutes = Math.round(totalDuration / 60)
+          const truckCost = durationHours * TRUCK_RATE_PER_HOUR
+          const tonnage = routesRef.current[selectedRouteRef.current]?.tonnage || 0
+          const costPerTon = tonnage > 0 ? truckCost / tonnage : 0
+          const tonMilesPerHour = tonnage > 0 ? (tonnage * totalDistance) / durationHours : 0
+
+          const updatedRoute = {
+            ...routesRef.current[selectedRouteRef.current],
+            directionsResult: result,
+            distance: totalDistance,
+            durationHours: durationHours,
+            durationMinutes: durationMinutes,
+            truckCost: truckCost,
+            costPerTon: costPerTon,
+            tonMilesPerHour: tonMilesPerHour,
+            efficiency: tonMilesPerHour / costPerTon,
+            summary: `Custom Route (${durationMinutes} min, ${totalDistance.toFixed(1)} mi)`
+          }
+
+          const updatedRoutes = [...routesRef.current]
+          updatedRoutes[selectedRouteRef.current] = updatedRoute
+          setRoutes(updatedRoutes)
+        }
+      }
+    )
+  }, [routeStart, routeEnd, waypoints])
 
   const classifyStep = (step) => {
     const instruction = (step.instructions || '').replace(/<[^>]*>/g, '').toLowerCase()
@@ -346,6 +491,12 @@ function App() {
       })
 
       renderRouteSteps(activeRoute)
+
+      // Set draggable start/end points for this route
+      const leg = activeRoute.directionsResult.routes[0].legs[0]
+      setRouteStart(leg.start_location)
+      setRouteEnd(leg.end_location)
+      setWaypoints([]) // Clear intermediate waypoints
     }
   }, [selectedRoute, routes])
 
@@ -488,6 +639,19 @@ function App() {
             onSearch={handleRouteSearch}
             loading={loading}
           />
+
+          {routes.length > 0 && (
+            <div className="drag-route-info">
+              <strong>📍 Drag Routes:</strong>
+              <ul style={{ margin: '8px 0', fontSize: '12px', paddingLeft: '16px' }}>
+                <li><strong>Green circle:</strong> Drag start point</li>
+                <li><strong>Orange circle:</strong> Drag waypoints or click to remove</li>
+                <li><strong>Red circle:</strong> Drag end point</li>
+                <li><strong>Shift+Click:</strong> Add waypoint to a segment</li>
+                <li><strong>Regular Click:</strong> Classify segment</li>
+              </ul>
+            </div>
+          )}
 
           {error && (
             <div className="error-message">
