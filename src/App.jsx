@@ -105,9 +105,13 @@ function App() {
   }
 
   const checkAndRerouteIfRestricted = () => {
+    console.log('checkAndRerouteIfRestricted called')
     const currentRoutes = routesRef.current
     const currentSelectedId = selectedRouteRef.current
-    if (!currentRoutes.length || currentSelectedId === null) return
+    if (!currentRoutes.length || currentSelectedId === null) {
+      console.log('No routes or selected route, returning')
+      return
+    }
 
     const routeHasRestricted = (route) =>
       route.directionsResult.routes[0].legs[0].steps.some(
