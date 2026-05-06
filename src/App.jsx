@@ -602,7 +602,7 @@ function App() {
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         map: mapsRef.current,
         suppressPolylines: true,
-        suppressMarkers: false,
+        suppressMarkers: true,
       })
       directionsRendererRef.current.setDirections(activeRoute.directionsResult)
       directionsRendererRef.current.setRouteIndex(0)
@@ -634,17 +634,19 @@ function App() {
 
       renderRouteSteps(activeRoute)
 
-      // Set draggable start/end points for this route
-      const leg = activeRoute.directionsResult.routes[0].legs[0]
-      console.log('Setting route start/end:', {
-        start: leg.start_location?.toJSON?.(),
-        end: leg.end_location?.toJSON?.()
-      })
-      setRouteStart(leg.start_location)
-      setRouteEnd(leg.end_location)
-      // Only clear waypoints if this is a new search (not a recalculation)
+      // Set draggable start/end points ONLY on new searches, not recalculations
+      // (recalculations should keep the user's dragged positions)
       if (!isRecalculatingRef.current) {
+        const leg = activeRoute.directionsResult.routes[0].legs[0]
+        console.log('Setting route start/end from calculated route:', {
+          start: leg.start_location?.toJSON?.(),
+          end: leg.end_location?.toJSON?.()
+        })
+        setRouteStart(leg.start_location)
+        setRouteEnd(leg.end_location)
         setWaypoints([])
+      } else {
+        console.log('Skipping route start/end reset (recalculation in progress)')
       }
       isRecalculatingRef.current = false // Reset flag
     }
