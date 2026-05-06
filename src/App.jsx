@@ -268,15 +268,12 @@ function App() {
       map: mapsRef.current,
       title: 'Drag to change start',
       draggable: true,
-      cursor: 'grab',
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: '#4caf50',
-        fillOpacity: 1,
-        strokeColor: '#fff',
-        strokeWeight: 2,
+      label: {
+        text: '▶',
+        color: '#fff',
+        fontSize: '20px'
       },
+      icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
     })
     startMarker.addListener('dragend', (e) => {
       setRouteStart(e.latLng)
@@ -290,15 +287,13 @@ function App() {
         map: mapsRef.current,
         title: `Waypoint ${idx + 1} - drag to move, click to remove`,
         draggable: true,
-        cursor: 'grab',
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: '#ff9800',
-          fillOpacity: 1,
-          strokeColor: '#fff',
-          strokeWeight: 2,
+        label: {
+          text: `${idx + 1}`,
+          color: '#fff',
+          fontSize: '14px',
+          fontWeight: 'bold'
         },
+        icon: 'http://maps.google.com/mapfiles/ms/icons/orange-dot.png'
       })
       wpMarker.addListener('dragend', (e) => {
         const newWaypoints = [...waypoints]
@@ -317,15 +312,12 @@ function App() {
       map: mapsRef.current,
       title: 'Drag to change end',
       draggable: true,
-      cursor: 'grab',
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: '#f44336',
-        fillOpacity: 1,
-        strokeColor: '#fff',
-        strokeWeight: 2,
+      label: {
+        text: '⬤',
+        color: '#fff',
+        fontSize: '20px'
       },
+      icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
     })
     endMarker.addListener('dragend', (e) => {
       setRouteEnd(e.latLng)
