@@ -662,7 +662,7 @@ function App() {
               classification: selectedSegment.classification || null,
               notes: selectedSegment.notes || null,
               jurisdiction: selectedSegment.jurisdiction || null,
-              roadName: selectedSegment.road_name || null,
+              road_name: selectedSegment.road_name || null,
             }}
             onClose={() => setShowSegmentClassifier(false)}
             onSegmentAdded={handleSegmentAdded}
