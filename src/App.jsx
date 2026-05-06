@@ -119,6 +119,26 @@ function App() {
     }
   }
 
+  // Helper: check if a route has ANY restricted steps in ANY leg
+  const routeHasAnyRestricted = (route) => {
+    const legs = route.directionsResult.routes[0].legs
+    return legs.some(leg =>
+      leg.steps.some(step => classifyStep(step) === 'restricted')
+    )
+  }
+
+  // Helper: count Class A steps in a route (all legs)
+  const countRouteClassA = (route) => {
+    const legs = route.directionsResult.routes[0].legs
+    let count = 0
+    legs.forEach(leg => {
+      leg.steps.forEach(step => {
+        if (classifyStep(step) === 'A') count++
+      })
+    })
+    return count
+  }
+
   const checkAndRerouteIfRestricted = () => {
     console.log('checkAndRerouteIfRestricted called')
     const currentRoutes = routesRef.current
@@ -128,22 +148,12 @@ function App() {
       return
     }
 
-    const routeHasRestricted = (route) =>
-      route.directionsResult.routes[0].legs[0].steps.some(
-        step => classifyStep(step) === 'restricted'
-      )
-
     const currentRoute = currentRoutes.find(r => r.id === currentSelectedId)
-    if (!currentRoute || !routeHasRestricted(currentRoute)) return
-
-    const countClassA = (route) =>
-      route.directionsResult.routes[0].legs[0].steps.filter(
-        step => classifyStep(step) === 'A'
-      ).length
+    if (!currentRoute || !routeHasAnyRestricted(currentRoute)) return
 
     const alternatives = currentRoutes
-      .filter(r => r.id !== currentSelectedId && !routeHasRestricted(r))
-      .sort((a, b) => countClassA(b) - countClassA(a) || b.efficiency - a.efficiency)
+      .filter(r => r.id !== currentSelectedId && !routeHasAnyRestricted(r))
+      .sort((a, b) => countRouteClassA(b) - countRouteClassA(a) || b.efficiency - a.efficiency)
 
     if (alternatives.length > 0) {
       setSelectedRoute(alternatives[0].id)
@@ -779,14 +789,10 @@ function App() {
       setRoutes(processedRoutes)
 
       if (processedRoutes.length > 0) {
-        // Prefer a route with no restricted steps
-        const routeHasRestricted = (r) =>
-          r.directionsResult.routes[0].legs[0].steps.some(
-            step => classifyStep(step) === 'restricted'
-          )
-        const best = processedRoutes.find(r => !routeHasRestricted(r)) || processedRoutes[0]
+        // Prefer a route with no restricted steps (checks all legs)
+        const best = processedRoutes.find(r => !routeHasAnyRestricted(r)) || processedRoutes[0]
         setSelectedRoute(best.id)
-        if (routeHasRestricted(processedRoutes[0]) && best.id !== processedRoutes[0].id) {
+        if (routeHasAnyRestricted(processedRoutes[0]) && best.id !== processedRoutes[0].id) {
           setRerouteMessage(`Selected alternate route to avoid restricted roads — using ${best.summary}`)
         }
       }
