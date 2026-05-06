@@ -279,6 +279,7 @@ function App() {
   }
 
   // Store tonnage and origin/dest for recalculation when dragging
+  // These are locked in at the start of a new search and NEVER updated by route calculations
   const recalcInfoRef = useRef({ tonnage: 0, origin: null, destination: null })
   const isRecalculatingRef = useRef(false) // Track if routes came from waypoint recalc (not new search)
 
@@ -373,19 +374,6 @@ function App() {
     renderWaypointMarkers()
   }, [waypoints, routeStart, routeEnd])
 
-  // Store tonnage/origin/dest for recalculation when user drags waypoints
-  useEffect(() => {
-    const activeRoute = routes.find(r => r.id === selectedRoute)
-    if (activeRoute) {
-      const leg = activeRoute.directionsResult.routes[0].legs[0]
-      recalcInfoRef.current = {
-        tonnage: activeRoute.tonnage,
-        origin: leg.start_location,
-        destination: leg.end_location
-      }
-      console.log('Stored recalc info:', recalcInfoRef.current)
-    }
-  }, [selectedRoute, routes])
 
   // Track if start/end drag is from user (not route update)
   const prevStartRef = useRef(null)
@@ -760,6 +748,18 @@ function App() {
 
       // Sort by efficiency
       processedRoutes.sort((a, b) => b.efficiency - a.efficiency)
+
+      // Lock in the origin/destination for this search (used for all subsequent recalculations)
+      if (processedRoutes.length > 0) {
+        const leg = processedRoutes[0].directionsResult.routes[0].legs[0]
+        recalcInfoRef.current = {
+          tonnage: tonnage,
+          origin: leg.start_location,
+          destination: leg.end_location
+        }
+        console.log('Locked in recalc info for new search:', recalcInfoRef.current)
+      }
+
       setRoutes(processedRoutes)
 
       if (processedRoutes.length > 0) {
